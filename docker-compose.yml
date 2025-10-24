@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  # --- Сервис 1: Backend (FastAPI) ---
+  backend:
+    build: ./backend  # Путь к папке с Dockerfile для backend
+    restart: always
+    # Мы не открываем (expose) порты во внешний мир,
+    # так как к нему будет обращаться только Nginx
+    networks:
+      - sportnormativ-net
+
+  # --- Сервис 2: Frontend (React + Nginx) ---
+  frontend:
+    build: ./frontend # Путь к папке с Dockerfile для frontend
+    restart: always
+    ports:
+      # Пробрасываем порт 80 контейнера (Nginx)
+      # на порт 80 твоего сервера (185.239.51.243)
+      - "80:80"
+    depends_on:
+      - backend       # Запускаться только после backend
+    networks:
+      - sportnormativ-net
+
+# Изолированная сеть для наших контейнеров,
+# чтобы они могли общаться друг с другом по именам (frontend, backend)
+networks:
+  sportnormativ-net:
+    driver: bridge
