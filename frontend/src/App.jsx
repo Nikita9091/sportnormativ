@@ -105,32 +105,55 @@ export default function App() {
 /* === Управление дисциплинами === */
 function DisciplinesManager({ sport, disciplines, onChange }) {
   const [newName, setNewName] = useState("");
+  const [newCode, setNewCode] = useState("");
 
   const handleAdd = async () => {
-    if (!newName.trim()) return;
-    await axios.post(`${API}/disciplines`, {
-      sport_id: sport.id,
-      discipline_names: [newName.trim()],
-    });
-    setNewName("");
-    onChange();
+    if (!newName.trim() || !newCode.trim()) {
+      alert("Введите и название, и код дисциплины.");
+      return;
+    }
+
+    try {
+      await axios.post(`${API}/disciplines`, {
+        sport_id: sport.id,
+        discipline_names: [newName.trim()],
+        discipline_codes: [newCode.trim()],
+      });
+      setNewName("");
+      setNewCode("");
+      onChange();
+    } catch (err) {
+      console.error("Ошибка при добавлении дисциплины:", err);
+      alert("Ошибка при добавлении дисциплины. Проверьте консоль.");
+    }
   };
 
   const handleDelete = async (id) => {
-    //if (!confirm("Удалить эту дисциплину?")) return;
-    await axios.delete(`${API}/disciplines/${id}`);
-    onChange();
+    if (!confirm("Удалить эту дисциплину?")) return;
+    try {
+      await axios.delete(`${API}/disciplines/${id}`);
+      onChange();
+    } catch (err) {
+      console.error("Ошибка при удалении дисциплины:", err);
+    }
   };
 
   return (
     <div>
       <h3 className="font-semibold mb-3">Дисциплины</h3>
-      <div className="flex gap-2 mb-4">
+
+      <div className="grid grid-cols-3 gap-2 mb-4">
         <input
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           placeholder="Название дисциплины"
-          className="border p-2 flex-grow rounded"
+          className="border p-2 rounded"
+        />
+        <input
+          value={newCode}
+          onChange={(e) => setNewCode(e.target.value)}
+          placeholder="Код дисциплины"
+          className="border p-2 rounded"
         />
         <button
           onClick={handleAdd}
@@ -148,7 +171,14 @@ function DisciplinesManager({ sport, disciplines, onChange }) {
               key={d.id}
               className="flex justify-between items-center px-3 py-2 hover:bg-gray-50"
             >
-              <span>{d.discipline_name}</span>
+              <div>
+                <span className="font-medium">{d.discipline_name}</span>
+                {d.discipline_code && (
+                  <span className="ml-2 text-sm text-gray-500">
+                    ({d.discipline_code})
+                  </span>
+                )}
+              </div>
               <button
                 className="text-gray-400 hover:text-red-600"
                 onClick={() => handleDelete(d.id)}
