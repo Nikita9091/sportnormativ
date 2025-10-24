@@ -2,13 +2,12 @@ from fastapi import FastAPI, HTTPException, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
-import sqlite3
-import os
+from fastapi.middleware.cors import CORSMiddleware
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import html
 
 app = FastAPI(title="SportNormativ API")
-
-from fastapi.middleware.cors import CORSMiddleware
 
 # --- Разрешаем CORS ---
 origins = [
@@ -16,71 +15,87 @@ origins = [
     "http://127.0.0.1:4173",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://185.239.51.243",
+    "http://localhost:3000",
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,         # Разрешённые источники
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],           # Разрешаем все методы: GET, POST, ...
-    allow_headers=["*"],           # Разрешаем все заголовки
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# === Настройка: путь к вашей sqlite БД ===
-DB_PATH = r"../db/sportnormativ_v3.db"
-# Для тестирования локально можно использовать относительный путь, например:
-# DB_PATH = "./sportnormativ_v3.db"
+# === Настройка подключения к PostgreSQL ===
+DB_CONFIG = {
+    "dbname": "sportnormativ_db",
+    "user": "api_user",
+    "password": "U_Akl*cOo$j%_9*",
+    "host": "185.239.51.243",
+    "port": "5432"
+}
 
-# ====== Небольшие вспомагательные функции ======
+
 def get_conn():
-    if not os.path.exists(DB_PATH):
-        raise FileNotFoundError(f"DB not found: {DB_PATH}")
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+        return conn
+    except Exception as e:
+        raise Exception(f"Database connection error: {e}")
 
-def row_to_dict(row: sqlite3.Row):
-    return {k: row[k] for k in row.keys()}
+def row_to_dict(row, cursor=None):
+    if cursor:
+        cols = [desc[0] for desc in cursor.description]
+        return dict(zip(cols, row))
+    return dict(row)
+
 
 # ====== Pydantic модели для входящих POST-запросов ======
 class DisciplinesIn(BaseModel):
     sport_id: int
     discipline_names: List[str] = Field(..., min_items=1)
+    discipline_codes: List[str] = Field(..., min_items=1)
+
 
 class ParameterTypeIn(BaseModel):
     short_name: str
+
 
 class ParameterIn(BaseModel):
     parameter_type_id: int
     parameter_value: str
     remark: Optional[str] = ""
 
+
 class LinkParametersIn(BaseModel):
     discipline_id: int
-    parameter_ids: List[int] = Field(..., min_items=1)  # ids from ref_parameters
+    parameter_ids: List[int] = Field(..., min_items=1)
+
 
 class NormativeRankEntry(BaseModel):
-    rank_id: int                       # ref_ranks.id
-    requirement_id: int                # ref_requirements.id (тип единицы измерения / статус)
-    condition_value: str               # e.g. '4,8' or '1' или 'место 3'
+    rank_id: int
+    requirement_id: int
+    condition_value: str
     sorting: Optional[int] = None
     remark: Optional[str] = ""
 
+
 class CreateNormativeIn(BaseModel):
     discipline_id: int
-    ldp_ids: List[int]                 # список id из lnk_discipline_parameters, которые применимы к этой дисциплине (1..n)
-    rank_entries: List[NormativeRankEntry]  # список записей для разных разрядов (в одном запросе можно передать несколько)
-    # Примечание: ldp_ids — это id из lnk_discipline_parameters, т.е. уже связанные параметр-дисциплина
+    ldp_ids: List[int]
+    rank_entries: List[NormativeRankEntry]
+
 
 # ====== GET /sports - список всех видов спорта ======
 @app.get("/sports", response_class=HTMLResponse)
 def get_sports_html():
-    """HTML view + JSON link to /sports/json"""
     conn = get_conn()
     cur = conn.cursor()
     cur.execute("SELECT id, sport_name FROM ref_sports ORDER BY sport_name")
     rows = cur.fetchall()
     conn.close()
+
     html_rows = "".join(f'<li><a href="/sports/{r["id"]}">{html.escape(r["sport_name"])}</a></li>' for r in rows)
     html_page = f"""
     <html>
@@ -96,6 +111,7 @@ def get_sports_html():
     """
     return HTMLResponse(content=html_page, status_code=200)
 
+
 @app.get("/sports/json")
 def get_sports_json():
     conn = get_conn()
@@ -105,22 +121,18 @@ def get_sports_json():
     conn.close()
     return {"sports": rows}
 
+
 # ====== GET /sports/{id} - нормативы для вида спорта ======
 @app.get("/sports/{sport_id}", response_class=HTMLResponse)
 def get_normatives_for_sport_html(sport_id: int):
-    """
-    Возвращает HTML таблицу нормативов (аналогично ранее обсуждаемому запросу).
-    Для JSON - используйте /sports/{id}/json
-    """
     conn = get_conn()
     cur = conn.cursor()
 
-    # Подготовим запрос — собираем параметры дисциплины в одну строку и сортируем по prestige (разряду)
     query = """
     SELECT 
         rs.sport_name AS sport_name,
         rd.discipline_name AS discipline_name,
-        group_concat(rpt.short_name || ': ' || rp.parameter_value, ', ') AS discipline_parameters,
+        STRING_AGG(rpt.short_name || ': ' || rp.parameter_value, ', ') AS discipline_parameters,
         rr.short_name AS rank_short,
         rr.full_name AS rank_full,
         rr.prestige AS rank_prestige,
@@ -131,14 +143,15 @@ def get_normatives_for_sport_html(sport_id: int):
     JOIN normatives n ON c.normative_id = n.id
     JOIN ref_ranks rr ON n.rank_id = rr.id
     JOIN ref_requirements rreq ON c.requirement_id = rreq.id
-    JOIN "groups" g ON n.id = g.normative_id
+    JOIN groups g ON n.id = g.normative_id
     JOIN lnk_discipline_parameters ldp ON g.discipline_parameter_id = ldp.id
     JOIN ref_disciplines rd ON ldp.discipline_id = rd.id
     JOIN ref_parameters rp ON ldp.parameter_id = rp.id
     JOIN ref_parameter_types rpt ON rp.parameter_type_id = rpt.id
     JOIN ref_sports rs ON rd.sport_id = rs.id
-    WHERE rs.id = ?
-    GROUP BY rs.sport_name, rd.discipline_name, rr.short_name, rreq.requirement_value, c.condition, rr.prestige
+    WHERE rs.id = %s
+    GROUP BY rs.sport_name, rd.discipline_name, rr.short_name, rr.full_name, rr.prestige, 
+             rreq.requirement_value, rreq.description, c.condition
     ORDER BY rd.discipline_name, rr.prestige
     """
     cur.execute(query, (sport_id,))
@@ -146,9 +159,9 @@ def get_normatives_for_sport_html(sport_id: int):
     conn.close()
 
     if not rows:
-        return HTMLResponse(content=f"<html><body><h3>Нет нормативов для вида спорта id={sport_id}</h3></body></html>", status_code=200)
+        return HTMLResponse(content=f"<html><body><h3>Нет нормативов для вида спорта id={sport_id}</h3></body></html>",
+                            status_code=200)
 
-    # Построим простую HTML-таблицу
     header = """
     <html><head><meta charset="utf-8"><title>Нормативы</title></head><body>
     <h2>Нормативы для вида спорта: {sport}</h2>
@@ -169,11 +182,9 @@ def get_normatives_for_sport_html(sport_id: int):
     for r in rows:
         body_rows += "<tr>"
         body_rows += f"<td>{html.escape(r['sport_name'])}</td>"
-        # Склеиваем дисциплину с параметрами
         params = r["discipline_parameters"] or ""
         body_rows += f"<td>{html.escape(r['discipline_name'])} ({html.escape(params)})</td>"
         body_rows += f"<td>{html.escape(r['rank_short'])}</td>"
-        # Требование: показываем короткое обозначение (сек, м) и описание
         req = r["requirement_short"] or ""
         req_desc = r["requirement_desc"] or ""
         body_rows += f"<td>{html.escape(req)} {'(' + html.escape(req_desc) + ')' if req_desc else ''}</td>"
@@ -183,6 +194,7 @@ def get_normatives_for_sport_html(sport_id: int):
     html_page = header.format(sport=html.escape(sport_name)) + body_rows + footer
     return HTMLResponse(content=html_page, status_code=200)
 
+
 @app.get("/sports/{sport_id}/json")
 def get_normatives_for_sport_json(sport_id: int):
     conn = get_conn()
@@ -191,7 +203,7 @@ def get_normatives_for_sport_json(sport_id: int):
     SELECT 
         rs.sport_name AS sport_name,
         rd.discipline_name AS discipline_name,
-        group_concat(rpt.short_name || ': ' || rp.parameter_value, ', ') AS discipline_parameters,
+        STRING_AGG(rpt.short_name || ': ' || rp.parameter_value, ', ') AS discipline_parameters,
         rr.id AS rank_id,
         rr.short_name AS rank_short,
         rr.full_name AS rank_full,
@@ -204,14 +216,15 @@ def get_normatives_for_sport_json(sport_id: int):
     JOIN normatives n ON c.normative_id = n.id
     JOIN ref_ranks rr ON n.rank_id = rr.id
     JOIN ref_requirements rreq ON c.requirement_id = rreq.id
-    JOIN "groups" g ON n.id = g.normative_id
+    JOIN groups g ON n.id = g.normative_id
     JOIN lnk_discipline_parameters ldp ON g.discipline_parameter_id = ldp.id
     JOIN ref_disciplines rd ON ldp.discipline_id = rd.id
     JOIN ref_parameters rp ON ldp.parameter_id = rp.id
     JOIN ref_parameter_types rpt ON rp.parameter_type_id = rpt.id
     JOIN ref_sports rs ON rd.sport_id = rs.id
-    WHERE rs.id = ?
-    GROUP BY rs.sport_name, rd.discipline_name, rr.id, rreq.requirement_value, c.condition, rr.prestige
+    WHERE rs.id = %s
+    GROUP BY rs.sport_name, rd.discipline_name, rr.id, rr.short_name, rr.full_name, rr.prestige,
+             rreq.id, rreq.requirement_value, rreq.description, c.condition
     ORDER BY rd.discipline_name, rr.prestige
     """
     cur.execute(query, (sport_id,))
@@ -219,31 +232,77 @@ def get_normatives_for_sport_json(sport_id: int):
     conn.close()
     return {"normatives": rows}
 
-# ====== POST /disciplines - добавить дисциплины (ref_disciplines) ======
+
 @app.post("/disciplines")
 def add_disciplines(payload: DisciplinesIn):
     conn = get_conn()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
     inserted = []
     errors = []
-    for name in payload.discipline_names:
+
+    # Проверяем соответствие списков
+    if len(payload.discipline_names) != len(payload.discipline_codes):
+        conn.close()
+        return {
+            "inserted": [],
+            "errors": ["Количество названий и кодов дисциплин не совпадает."]
+        }
+
+    for name, code in zip(payload.discipline_names, payload.discipline_codes):
         name = name.strip()
-        if not name:
+        code = code.strip()
+        if not name or not code:
             continue
+
         try:
-            cur.execute("INSERT INTO ref_disciplines (sport_id, discipline_name) VALUES (?, ?)", (payload.sport_id, name))
-            inserted.append({"id": cur.lastrowid, "discipline_name": name})
-        except sqlite3.IntegrityError as e:
-            # Возможно дубликат (у нас UNIQUE discipline_name). Попробуем вернуть существующую запись
-            cur.execute("SELECT id FROM ref_disciplines WHERE discipline_name = ?", (name,))
+            cur.execute(
+                """
+                INSERT INTO ref_disciplines (sport_id, discipline_code, discipline_name)
+                VALUES (%s, %s, %s)
+                RETURNING id, discipline_name, discipline_code
+                """,
+                (payload.sport_id, code, name)
+            )
+            row = cur.fetchone()
+            inserted.append(dict(row))
+
+        except psycopg2.errors.UniqueViolation:
+            # Если уже существует — достанем id
+            conn.rollback()
+            cur.execute(
+                """
+                SELECT id, discipline_name, discipline_code
+                FROM ref_disciplines
+                WHERE (discipline_name = %s OR discipline_code = %s)
+                AND sport_id = %s
+                """,
+                (name, code, payload.sport_id)
+            )
             row = cur.fetchone()
             if row:
-                inserted.append({"id": row["id"], "discipline_name": name, "note": "already exists"})
+                inserted.append({**row, "note": "already exists"})
             else:
-                errors.append({"discipline_name": name, "error": str(e)})
-    conn.commit()
+                errors.append({
+                    "discipline_name": name,
+                    "discipline_code": code,
+                    "error": "unique constraint violated but not found"
+                })
+        except Exception as e:
+            conn.rollback()
+            errors.append({
+                "discipline_name": name,
+                "discipline_code": code,
+                "error": str(e)
+            })
+        else:
+            conn.commit()
+
+    cur.close()
     conn.close()
+
     return {"inserted": inserted, "errors": errors}
+
 
 # ====== POST /parameter-types - добавить тип параметра ======
 @app.post("/parameter-types")
@@ -251,98 +310,105 @@ def add_parameter_type(payload: ParameterTypeIn):
     conn = get_conn()
     cur = conn.cursor()
     try:
-        cur.execute("INSERT INTO ref_parameter_types (short_name) VALUES (?)", (payload.short_name.strip(),))
-        conn.commit()
-        nid = cur.lastrowid
-    except sqlite3.IntegrityError:
-        # если нет уникальности, просто вернуть существующий (по short_name)
-        cur.execute("SELECT id FROM ref_parameter_types WHERE short_name = ?", (payload.short_name.strip(),))
+        cur.execute("INSERT INTO ref_parameters_types (type_name) VALUES (%s) RETURNING id",
+                    (payload.short_name.strip(),))
         row = cur.fetchone()
-        nid = row["id"] if row else None
+        nid = row["id"]
+        conn.commit()
+    except Exception as e:
+        if "unique" in str(e).lower():
+            cur.execute("SELECT id FROM ref_parameters_types WHERE type_name = %s", (payload.short_name.strip(),))
+            row = cur.fetchone()
+            nid = row["id"] if row else None
+        else:
+            nid = None
     conn.close()
-    return {"id": nid, "short_name": payload.short_name}
+    return {"id": nid, "type_name": payload.short_name}
 
-# ====== POST /parameters - добавить значение параметра (ref_parameters) ======
+
+# ====== POST /parameters - добавить значение параметра ======
 @app.post("/parameters")
 def add_parameter(payload: ParameterIn):
     conn = get_conn()
     cur = conn.cursor()
-    # Проверим наличие parameter_type
-    cur.execute("SELECT id FROM ref_parameter_types WHERE id = ?", (payload.parameter_type_id,))
+    cur.execute("SELECT id FROM ref_parameters_types WHERE id = %s", (payload.parameter_type_id,))
     if not cur.fetchone():
         conn.close()
         raise HTTPException(status_code=400, detail=f"parameter_type_id {payload.parameter_type_id} not found")
+
     try:
-        cur.execute("INSERT INTO ref_parameters (parameter_type_id, parameter_value, remark) VALUES (?, ?, ?)",
-                    (payload.parameter_type_id, payload.parameter_value.strip(), payload.remark or ""))
-        conn.commit()
-        pid = cur.lastrowid
-    except sqlite3.IntegrityError as e:
-        # попытаемся вернуть существующую запись по parameter_value+type (если такое есть)
-        cur.execute("SELECT id FROM ref_parameters WHERE parameter_type_id = ? AND parameter_value = ?",
+        cur.execute("""INSERT INTO ref_parameters (parameter_type_id, parameter_value) 
+                      VALUES (%s, %s) RETURNING id""",
                     (payload.parameter_type_id, payload.parameter_value.strip()))
         row = cur.fetchone()
-        pid = row["id"] if row else None
+        pid = row["id"]
+        conn.commit()
+    except Exception as e:
+        if "unique" in str(e).lower():
+            cur.execute("SELECT id FROM ref_parameters WHERE parameter_type_id = %s AND parameter_value = %s",
+                        (payload.parameter_type_id, payload.parameter_value.strip()))
+            row = cur.fetchone()
+            pid = row["id"] if row else None
+        else:
+            pid = None
     conn.close()
     return {"id": pid, "parameter_value": payload.parameter_value, "parameter_type_id": payload.parameter_type_id}
 
-# ====== POST /link-parameters - привязать параметры к дисциплине (lnk_discipline_parameters) ======
+
+# ====== POST /link-parameters - привязать параметры к дисциплине ======
 @app.post("/link-parameters")
 def link_parameters(payload: LinkParametersIn):
     conn = get_conn()
     cur = conn.cursor()
-    # проверим дисциплину
-    cur.execute("SELECT id FROM ref_disciplines WHERE id = ?", (payload.discipline_id,))
+    cur.execute("SELECT id FROM ref_disciplines WHERE id = %s", (payload.discipline_id,))
     if not cur.fetchone():
         conn.close()
         raise HTTPException(status_code=400, detail=f"discipline_id {payload.discipline_id} not found")
+
     inserted = []
     errors = []
     for pid in payload.parameter_ids:
-        # убедимся, что parameter существует
-        cur.execute("SELECT id FROM ref_parameters WHERE id = ?", (pid,))
+        cur.execute("SELECT id FROM ref_parameters WHERE id = %s", (pid,))
         if not cur.fetchone():
             errors.append({"parameter_id": pid, "error": "not found"})
             continue
         try:
-            cur.execute("INSERT INTO lnk_discipline_parameters (discipline_id, parameter_id) VALUES (?, ?)",
-                        (payload.discipline_id, pid))
-            inserted.append({"id": cur.lastrowid, "discipline_id": payload.discipline_id, "parameter_id": pid})
-        except sqlite3.IntegrityError:
-            # возможен дубликат — вернём существующий id
-            cur.execute("SELECT id FROM lnk_discipline_parameters WHERE discipline_id = ? AND parameter_id = ?",
+            cur.execute("""INSERT INTO lnk_discipline_parameters (discipline_id, parameter_id) 
+                          VALUES (%s, %s) RETURNING id""",
                         (payload.discipline_id, pid))
             row = cur.fetchone()
-            if row:
-                inserted.append({"id": row["id"], "discipline_id": payload.discipline_id, "parameter_id": pid, "note": "already exists"})
+            inserted.append({"id": row["id"], "discipline_id": payload.discipline_id, "parameter_id": pid})
+        except Exception as e:
+            if "unique" in str(e).lower():
+                cur.execute("""SELECT id FROM lnk_discipline_parameters 
+                             WHERE discipline_id = %s AND parameter_id = %s""",
+                            (payload.discipline_id, pid))
+                row = cur.fetchone()
+                if row:
+                    inserted.append({"id": row["id"], "discipline_id": payload.discipline_id, "parameter_id": pid,
+                                     "note": "already exists"})
+                else:
+                    errors.append({"parameter_id": pid, "error": str(e)})
             else:
-                errors.append({"parameter_id": pid, "error": "integrity error"})
+                errors.append({"parameter_id": pid, "error": str(e)})
     conn.commit()
     conn.close()
     return {"inserted": inserted, "errors": errors}
 
-# ====== POST /normatives - добавление нормативов (самая сложная операция) ======
+
+# ====== POST /normatives - добавление нормативов ======
 @app.post("/normatives")
 def add_normatives(payload: CreateNormativeIn):
-    """
-    Добавляет нормативы:
-    - Для каждого rank_entry создаётся запись в normatives (rank_id)
-    - Для каждой созданной normative добавляются строки в groups для каждого ldp_id
-    - Для каждой created normative добавляется condition (requirement_id + condition_value)
-    Возвращает список созданных normatives и conditions.
-    """
     conn = get_conn()
     cur = conn.cursor()
 
-    # Проверки: дисциплина существует
-    cur.execute("SELECT id FROM ref_disciplines WHERE id = ?", (payload.discipline_id,))
+    cur.execute("SELECT id FROM ref_disciplines WHERE id = %s", (payload.discipline_id,))
     if not cur.fetchone():
         conn.close()
         raise HTTPException(status_code=400, detail=f"discipline_id {payload.discipline_id} not found")
 
-    # Проверим, что все ldp_ids действительно принадлежат этой дисциплине
     for ldp_id in payload.ldp_ids:
-        cur.execute("SELECT discipline_id FROM lnk_discipline_parameters WHERE id = ?", (ldp_id,))
+        cur.execute("SELECT discipline_id FROM lnk_discipline_parameters WHERE id = %s", (ldp_id,))
         row = cur.fetchone()
         if not row:
             conn.close()
@@ -354,31 +420,31 @@ def add_normatives(payload: CreateNormativeIn):
 
     created = []
     errors = []
-    # Начинаем транзакцию
+
     try:
         for entry in payload.rank_entries:
-            # Проверим существование rank и requirement
-            cur.execute("SELECT id FROM ref_ranks WHERE id = ?", (entry.rank_id,))
+            cur.execute("SELECT id FROM ref_ranks WHERE id = %s", (entry.rank_id,))
             if not cur.fetchone():
                 errors.append({"rank_id": entry.rank_id, "error": "rank not found"})
                 continue
-            cur.execute("SELECT id FROM ref_requirements WHERE id = ?", (entry.requirement_id,))
+
+            cur.execute("SELECT id FROM ref_requirements WHERE id = %s", (entry.requirement_id,))
             if not cur.fetchone():
                 errors.append({"requirement_id": entry.requirement_id, "error": "requirement not found"})
                 continue
 
-            # Вставляем норматив
-            cur.execute("INSERT INTO normatives (rank_id, sorting, remark) VALUES (?, ?, ?)",
+            cur.execute("""INSERT INTO normatives (rank_id, sorting, remark) 
+                          VALUES (%s, %s, %s) RETURNING id""",
                         (entry.rank_id, entry.sorting, entry.remark or ""))
-            normative_id = cur.lastrowid
+            normative_row = cur.fetchone()
+            normative_id = normative_row["id"]
 
-            # Добавляем связи groups - одна группа для каждого ldp_id
             for ldp_id in payload.ldp_ids:
-                cur.execute("INSERT INTO \"groups\" (discipline_parameter_id, normative_id) VALUES (?, ?)",
+                cur.execute("INSERT INTO groups (discipline_parameter_id, normative_id) VALUES (%s, %s)",
                             (ldp_id, normative_id))
 
-            # Добавим condition (requirement_id + condition_value)
-            cur.execute("INSERT INTO conditions (normative_id, requirement_id, condition) VALUES (?, ?, ?)",
+            cur.execute("""INSERT INTO conditions (normative_id, requirement_id, condition) 
+                          VALUES (%s, %s, %s)""",
                         (normative_id, entry.requirement_id, entry.condition_value))
 
             created.append({
@@ -396,7 +462,8 @@ def add_normatives(payload: CreateNormativeIn):
     conn.close()
     return {"created": created, "errors": errors}
 
-# ====== Дополнительные вспомогательные эндпоинты (полезны для UI) ======
+
+# ====== Дополнительные вспомогательные эндпоинты ======
 @app.get("/disciplines/json")
 def list_disciplines_json():
     conn = get_conn()
@@ -406,35 +473,34 @@ def list_disciplines_json():
     conn.close()
     return {"disciplines": rows}
 
+
 @app.get("/parameters/json")
 def list_parameters_json():
     conn = get_conn()
     cur = conn.cursor()
     cur.execute("""
-    SELECT p.id, p.parameter_type_id, t.short_name as parameter_type_name, p.parameter_value, p.remark
+    SELECT p.id, p.parameter_type_id, t.type_name as parameter_type_name, p.parameter_value
     FROM ref_parameters p
-    LEFT JOIN ref_parameter_types t ON p.parameter_type_id = t.id
-    ORDER BY t.short_name, p.parameter_value
+    LEFT JOIN ref_parameters_types t ON p.parameter_type_id = t.id
+    ORDER BY t.type_name, p.parameter_value
     """)
     rows = [row_to_dict(r) for r in cur.fetchall()]
     conn.close()
     return {"parameters": rows}
 
+
 @app.get("/parameter_types/json")
-def list_parameters_json():
+def list_parameter_types_json():
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("""
-    SELECT id, short_name as parameter_type_name
-    FROM ref_parameter_types
-    """)
+    cur.execute("SELECT id, type_name as parameter_type_name FROM ref_parameters_types")
     rows = [row_to_dict(r) for r in cur.fetchall()]
     conn.close()
     return {"parameter_types": rows}
 
+
 @app.get("/ldp/json")
 def list_ldp_json():
-    # lnk_discipline_parameters
     conn = get_conn()
     cur = conn.cursor()
     cur.execute("""
@@ -448,6 +514,7 @@ def list_ldp_json():
     conn.close()
     return {"lnk_discipline_parameters": rows}
 
+
 @app.get("/ranks/json")
 def list_ranks_json():
     conn = get_conn()
@@ -457,16 +524,50 @@ def list_ranks_json():
     conn.close()
     return {"ranks": rows}
 
+
 @app.get("/requirements/json")
 def list_requirements_json():
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("SELECT id, requirement_type_id, requirement_value, description FROM ref_requirements ORDER BY requirement_type_id")
+    cur.execute(
+        "SELECT id, requirement_type_id, requirement_value, description FROM ref_requirements ORDER BY requirement_type_id")
     rows = [row_to_dict(r) for r in cur.fetchall()]
     conn.close()
     return {"requirements": rows}
 
-# ====== Простая домашняя страница со ссылками ======
+
+# ====== DELETE endpoints ======
+@app.delete("/disciplines/{id}")
+def delete_discipline(id: int):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM ref_disciplines WHERE id = %s", (id,))
+    conn.commit()
+    conn.close()
+    return {"deleted": id}
+
+
+@app.delete("/parameter-types/{id}")
+def delete_param_type(id: int):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM ref_parameters_types WHERE id = %s", (id,))
+    conn.commit()
+    conn.close()
+    return {"deleted": id}
+
+
+@app.delete("/parameters/{id}")
+def delete_parameter(id: int):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM ref_parameters WHERE id = %s", (id,))
+    conn.commit()
+    conn.close()
+    return {"deleted": id}
+
+
+# ====== Домашняя страница ======
 @app.get("/", response_class=HTMLResponse)
 def index():
     return HTMLResponse("""
@@ -485,30 +586,8 @@ def index():
     </body></html>
     """, status_code=200)
 
-@app.delete("/disciplines/{id}")
-def delete_discipline(id: int):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM ref_disciplines WHERE id = ?", (id,))
-    conn.commit()
-    conn.close()
-    return {"deleted": id}
 
-@app.delete("/parameter-types/{id}")
-def delete_param_type(id: int):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM ref_parameter_types WHERE id = ?", (id,))
-    conn.commit()
-    conn.close()
-    return {"deleted": id}
+if __name__ == "__main__":
+    import uvicorn
 
-@app.delete("/parameters/{id}")
-def delete_parameter(id: int):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM ref_parameters WHERE id = ?", (id,))
-    conn.commit()
-    conn.close()
-    return {"deleted": id}
-
+    uvicorn.run(app, host="0.0.0.0", port=8000)
