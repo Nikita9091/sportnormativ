@@ -13,10 +13,13 @@ app = FastAPI(title="SportNormativ API")
 origins = [
     "http://localhost:4173",
     "http://127.0.0.1:4173",
-    "http://localhost:5173",
+    "http://localhost:5173", 
     "http://127.0.0.1:5173",
     "http://185.239.51.243",
-    "http://localhost:3000",
+    "http://sportnormativ.ru",
+    "https://sportnormativ.ru",
+    "http://www.sportnormativ.ru",
+    "https://www.sportnormativ.ru",
 ]
 
 app.add_middleware(
