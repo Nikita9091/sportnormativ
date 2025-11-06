@@ -1,0 +1,31 @@
+# traefik.yml
+entryPoints:
+  web:
+    address: ":80"
+    # Автоматически перенаправляем весь HTTP на HTTPS
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+
+# Включаем API и дашборд (для отладки)
+api:
+  dashboard: true
+
+# Включаем Docker-провайдер
+providers:
+  docker:
+    exposedByDefault: false # Будем явно указывать, какие контейнеры "выставлять" наружу
+    network: sportnormativ-net # Указываем нашу сеть из docker-compose
+
+# Настраиваем Let's Encrypt (SSL-сертификаты)
+certificatesResolvers:
+  myresolver:
+    acme:
+      email: "a.nikita1902@gmail.com"
+      storage: "acme.json" # Файл для хранения сертификатов
+      httpChallenge:
+        entryPoint: web # Проверка владения доменом будет по 80-му порту
