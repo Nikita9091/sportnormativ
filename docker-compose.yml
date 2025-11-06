@@ -1,32 +1,81 @@
 version: '3.8'
 
 services:
+  # --- НОВЫЙ СЕРВИС: Traefik (Обратный прокси) ---
+  traefik:
+    image: traefik:v2.10 # Рекомендую использовать конкретную версию
+    container_name: traefik
+    restart: always
+    ports:
+      # Открываем 80 и 443 порты на хост-машине
+      - "80:80"   # HTTP
+      - "443:443" # HTTPS
+    volumes:
+      # Чтобы Traefik мог "слушать" Docker
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Файлы конфигурации, которые мы создали
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./acme.json:/acme.json:rw # rw - read/write
+      # Файл с паролем для дашборда
+      - ./.htpasswd:/.htpasswd:ro # ro - read only
+    networks:
+      - sportnormativ-net
+    labels:
+      # === Безопасный дашборд Traefik ===
+      # (Будет доступен по https://traefik.sportnormativ.ru)
+      # (Не забудь добавить A-запись "traefik" на свой IP в DNS)
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.sportnormativ.ru`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls=true"
+      - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
+      # Включаем авторизацию
+      - "traefik.http.routers.dashboard.middlewares=auth"
+      # Описываем middleware авторизации
+      - "traefik.http.middlewares.auth.basicauth.usersfile=/.htpasswd"
+      # Указываем, что это "внутренний" сервис API Traefik
+      - "traefik.http.routers.dashboard.service=api@internal"
+
   # --- Сервис 1: Backend (FastAPI) ---
   backend:
-    build: ./backend  # Путь к папке с Dockerfile для backend
+    build: ./backend
     restart: always
-    # Мы не открываем (expose) порты во внешний мир,
-    # так как к нему будет обращаться только Nginx
+    # Порты больше не нужны, он общается с frontend внутри сети
     networks:
       - sportnormativ-net
 
   # --- Сервис 2: Frontend (React + Nginx) ---
   frontend:
-    build: ./frontend # Путь к папке с Dockerfile для frontend
+    build: ./frontend
     restart: always
-    ports:
-      # Пробрасываем порт 80 контейнера (Nginx)
-      # на порт 80 твоего сервера (185.239.51.243)
-      - "80:80"
-      - "443:443"
-
+    # !!! МЫ УБРАЛИ СЕКЦИЮ 'ports' !!!
+    # Traefik будет сам к нему обращаться
     depends_on:
-      - backend       # Запускаться только после backend
+      - backend
     networks:
       - sportnormativ-net
+    labels:
+      # --- Метки для Traefik, чтобы он "нашел" наше приложение ---
+      - "traefik.enable=true" # Включить Traefik для этого сервиса
 
-# Изолированная сеть для наших контейнеров,
-# чтобы они могли общаться друг с другом по именам (frontend, backend)
+      # === HTTPS Роутер (основной) ===
+      - "traefik.http.routers.frontend-https.rule=Host(`sportnormativ.ru`) || Host(`www.sportnormativ.ru`)"
+      - "traefik.http.routers.frontend-https.entrypoints=websecure" # Слушать только 443 порт
+      - "traefik.http.routers.frontend-https.tls=true"
+      - "traefik.http.routers.frontend-https.tls.certresolver=myresolver" # Использовать наш Let's Encrypt
+
+      # === Сервис (куда направлять трафик) ===
+      # Traefik должен "стучаться" на порт 80 нашего Nginx-контейнера
+      - "traefik.http.services.frontend-service.loadbalancer.server.port=80"
+      - "traefik.http.routers.frontend-https.service=frontend-service"
+      
+      # === HTTP Роутер (нужен только для редиректа, определен в traefik.yml) ===
+      - "traefik.http.routers.frontend-http.rule=Host(`sportnormativ.ru`) || Host(`www.sportnormativ.ru`)"
+      - "traefik.http.routers.frontend-http.entrypoints=web"
+      - "traefik.http.routers.frontend-http.service=frontend-service"
+
+
+# Наша общая сеть
 networks:
   sportnormativ-net:
     driver: bridge
