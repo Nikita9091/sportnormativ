@@ -86,7 +86,8 @@ class NormativeRankEntry(BaseModel):
 
 class CreateNormativeIn(BaseModel):
     discipline_id: int
-    ldp_ids: List[int]
+    ldp_ids: List[int]       # id связей дисциплины с параметрами (lnk_discipline_parameters)
+    requirement_id: int      # id из ref_requirements
     rank_entries: List[NormativeRankEntry]
 
 
@@ -135,7 +136,7 @@ def get_normatives_for_sport_html(sport_id: int):
     SELECT 
         rs.sport_name AS sport_name,
         rd.discipline_name AS discipline_name,
-        STRING_AGG(rpt.short_name || ': ' || rp.parameter_value, ', ') AS discipline_parameters,
+        STRING_AGG(rpt.type_name || ': ' || rp.parameter_value, ', ') AS discipline_parameters,
         rr.short_name AS rank_short,
         rr.full_name AS rank_full,
         rr.prestige AS rank_prestige,
@@ -150,7 +151,7 @@ def get_normatives_for_sport_html(sport_id: int):
     JOIN lnk_discipline_parameters ldp ON g.discipline_parameter_id = ldp.id
     JOIN ref_disciplines rd ON ldp.discipline_id = rd.id
     JOIN ref_parameters rp ON ldp.parameter_id = rp.id
-    JOIN ref_parameter_types rpt ON rp.parameter_type_id = rpt.id
+    JOIN ref_parameters_types rpt ON rp.parameter_type_id = rpt.id
     JOIN ref_sports rs ON rd.sport_id = rs.id
     WHERE rs.id = %s
     GROUP BY rs.sport_name, rd.discipline_name, rr.short_name, rr.full_name, rr.prestige, 
@@ -399,17 +400,18 @@ def link_parameters(payload: LinkParametersIn):
     return {"inserted": inserted, "errors": errors}
 
 
-# ====== POST /normatives - добавление нормативов ======
 @app.post("/normatives")
 def add_normatives(payload: CreateNormativeIn):
     conn = get_conn()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
+    # --- Проверка дисциплины ---
     cur.execute("SELECT id FROM ref_disciplines WHERE id = %s", (payload.discipline_id,))
     if not cur.fetchone():
         conn.close()
         raise HTTPException(status_code=400, detail=f"discipline_id {payload.discipline_id} not found")
 
+    # --- Проверка lnk_discipline_parameters ---
     for ldp_id in payload.ldp_ids:
         cur.execute("SELECT discipline_id FROM lnk_discipline_parameters WHERE id = %s", (ldp_id,))
         row = cur.fetchone()
@@ -418,50 +420,64 @@ def add_normatives(payload: CreateNormativeIn):
             raise HTTPException(status_code=400, detail=f"lnk_discipline_parameters id {ldp_id} not found")
         if row["discipline_id"] != payload.discipline_id:
             conn.close()
-            raise HTTPException(status_code=400,
-                                detail=f"lnk_discipline_parameters id {ldp_id} does not belong to discipline_id {payload.discipline_id}")
+            raise HTTPException(status_code=400, detail=f"ldp_id {ldp_id} does not belong to discipline_id {payload.discipline_id}")
+
+    # --- Проверка requirement ---
+    cur.execute("SELECT id FROM ref_requirements WHERE id = %s", (payload.requirement_id,))
+    if not cur.fetchone():
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"requirement_id {payload.requirement_id} not found")
 
     created = []
     errors = []
 
     try:
         for entry in payload.rank_entries:
+            # Пропускаем пустые поля (если пользователь не заполнил значение)
+            if not entry.condition_value:
+                continue
+
+            # Проверяем, что rank существует
             cur.execute("SELECT id FROM ref_ranks WHERE id = %s", (entry.rank_id,))
             if not cur.fetchone():
                 errors.append({"rank_id": entry.rank_id, "error": "rank not found"})
                 continue
 
-            cur.execute("SELECT id FROM ref_requirements WHERE id = %s", (entry.requirement_id,))
-            if not cur.fetchone():
-                errors.append({"requirement_id": entry.requirement_id, "error": "requirement not found"})
-                continue
+            # --- 1️⃣ Создаём запись в normatives ---
+            cur.execute("""
+                INSERT INTO normatives (rank_id)
+                VALUES (%s)
+                RETURNING id
+            """, (entry.rank_id,))
+            normative_id = cur.fetchone()["id"]
 
-            cur.execute("""INSERT INTO normatives (rank_id, sorting, remark) 
-                          VALUES (%s, %s, %s) RETURNING id""",
-                        (entry.rank_id, entry.sorting, entry.remark or ""))
-            normative_row = cur.fetchone()
-            normative_id = normative_row["id"]
-
+            # --- 2️⃣ Связываем с параметрами ---
             for ldp_id in payload.ldp_ids:
-                cur.execute("INSERT INTO groups (discipline_parameter_id, normative_id) VALUES (%s, %s)",
-                            (ldp_id, normative_id))
+                cur.execute("""
+                    INSERT INTO groups (discipline_parameter_id, normative_id)
+                    VALUES (%s, %s)
+                """, (ldp_id, normative_id))
 
-            cur.execute("""INSERT INTO conditions (normative_id, requirement_id, condition) 
-                          VALUES (%s, %s, %s)""",
-                        (normative_id, entry.requirement_id, entry.condition_value))
+            # --- 3️⃣ Добавляем условие (норму) ---
+            cur.execute("""
+                INSERT INTO conditions (normative_id, requirement_id, condition)
+                VALUES (%s, %s, %s)
+            """, (normative_id, payload.requirement_id, entry.condition_value))
 
             created.append({
                 "normative_id": normative_id,
                 "rank_id": entry.rank_id,
-                "requirement_id": entry.requirement_id,
+                "requirement_id": payload.requirement_id,
                 "condition_value": entry.condition_value,
                 "linked_ldp_ids": payload.ldp_ids
             })
+
         conn.commit()
     except Exception as e:
         conn.rollback()
         conn.close()
-        raise HTTPException(status_code=500, detail=f"DB error: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
     conn.close()
     return {"created": created, "errors": errors}
 
@@ -513,6 +529,22 @@ def list_ldp_json():
     LEFT JOIN ref_parameters p ON l.parameter_id = p.id
     ORDER BY d.discipline_name, p.parameter_value
     """)
+    rows = [row_to_dict(r) for r in cur.fetchall()]
+    conn.close()
+    return {"lnk_discipline_parameters": rows}
+
+''
+@app.get("/discipline-parameters/{id}")
+def list_ldp_(id: int):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+    SELECT p.parameter_value
+    FROM lnk_discipline_parameters l
+    LEFT JOIN ref_disciplines d ON l.discipline_id = d.id
+    LEFT JOIN ref_parameters p ON l.parameter_id = p.id
+    WHERE l.discipline_id = %s
+    """, (id,))
     rows = [row_to_dict(r) for r in cur.fetchall()]
     conn.close()
     return {"lnk_discipline_parameters": rows}
@@ -593,4 +625,4 @@ def index():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="localhost", port=8000)
