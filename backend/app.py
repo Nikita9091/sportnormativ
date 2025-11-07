@@ -199,23 +199,25 @@ def get_normatives_for_sport_html(sport_id: int):
     return HTMLResponse(content=html_page, status_code=200)
 
 
-@app.get("/sports/{sport_id}/json")
+@app.get("/sports/{sport_id}/normatives/json")
 def get_normatives_for_sport_json(sport_id: int):
     conn = get_conn()
     cur = conn.cursor()
+
     query = """
     SELECT 
         rs.sport_name AS sport_name,
         rd.discipline_name AS discipline_name,
-        STRING_AGG(rpt.short_name || ': ' || rp.parameter_value, ', ') AS discipline_parameters,
-        rr.id AS rank_id,
+        rd.discipline_code AS discipline_code,
+        STRING_AGG(rpt.type_name || ': ' || rp.parameter_value, ', ') AS discipline_parameters,
         rr.short_name AS rank_short,
         rr.full_name AS rank_full,
         rr.prestige AS rank_prestige,
-        rreq.id AS requirement_id,
         rreq.requirement_value AS requirement_short,
         rreq.description AS requirement_desc,
-        c.condition AS condition_value
+        c.condition AS condition_value,
+        rr.id as rank_id,
+        rd.id as discipline_id
     FROM conditions c
     JOIN normatives n ON c.normative_id = n.id
     JOIN ref_ranks rr ON n.rank_id = rr.id
@@ -224,17 +226,50 @@ def get_normatives_for_sport_json(sport_id: int):
     JOIN lnk_discipline_parameters ldp ON g.discipline_parameter_id = ldp.id
     JOIN ref_disciplines rd ON ldp.discipline_id = rd.id
     JOIN ref_parameters rp ON ldp.parameter_id = rp.id
-    JOIN ref_parameter_types rpt ON rp.parameter_type_id = rpt.id
+    JOIN ref_parameters_types rpt ON rp.parameter_type_id = rpt.id
     JOIN ref_sports rs ON rd.sport_id = rs.id
     WHERE rs.id = %s
-    GROUP BY rs.sport_name, rd.discipline_name, rr.id, rr.short_name, rr.full_name, rr.prestige,
-             rreq.id, rreq.requirement_value, rreq.description, c.condition
-    ORDER BY rd.discipline_name, rr.prestige
+    GROUP BY rs.sport_name, rd.discipline_name, rd.discipline_code, rr.short_name, 
+             rr.full_name, rr.prestige, rreq.requirement_value, rreq.description, 
+             c.condition, rr.id, rd.id
+    ORDER BY rd.discipline_name, rr.prestige DESC, rr.id
     """
     cur.execute(query, (sport_id,))
-    rows = [row_to_dict(r) for r in cur.fetchall()]
+    rows = cur.fetchall()
     conn.close()
-    return {"normatives": rows}
+
+    if not rows:
+        return {
+            "sport_id": sport_id,
+            "sport_name": "Неизвестный вид спорта",
+            "normatives": [],
+            "total_count": 0
+        }
+
+    # Преобразуем в JSON-совместимый формат
+    normatives_data = []
+    for row in rows:
+        normatives_data.append({
+            "sport_name": row["sport_name"],
+            "discipline_name": row["discipline_name"],
+            "discipline_code": row["discipline_code"],
+            "discipline_parameters": row["discipline_parameters"],
+            "rank_short": row["rank_short"],
+            "rank_full": row["rank_full"],
+            "rank_prestige": row["rank_prestige"],
+            "requirement_short": row["requirement_short"],
+            "requirement_desc": row["requirement_desc"],
+            "condition_value": row["condition_value"],
+            "rank_id": row["rank_id"],
+            "discipline_id": row["discipline_id"]
+        })
+
+    return {
+        "sport_id": sport_id,
+        "sport_name": rows[0]["sport_name"],
+        "normatives": normatives_data,
+        "total_count": len(normatives_data)
+    }
 
 
 @app.post("/disciplines")

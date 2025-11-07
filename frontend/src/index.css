@@ -28,8 +28,6 @@ a:hover {
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
 }
@@ -69,4 +67,18 @@ button:focus-visible {
   button {
     background-color: #f9f9f9;
   }
+}
+
+/* Mobile-first responsive design */
+.container-responsive {
+  @apply w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+.card-responsive {
+  @apply bg-white shadow rounded-2xl p-4 sm:p-6;
+}
+
+/* Accordion transitions */
+.accordion-content {
+  transition: max-height 0.3s ease-out, opacity 0.3s ease;
 }
