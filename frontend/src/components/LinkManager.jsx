@@ -6,42 +6,100 @@ const API = API_CONFIG.baseURL;
 
 export default function LinkManager({ disciplines = [], parameters = [], onChange, sport }) {
   const [disciplineId, setDisciplineId] = useState("");
-  const [selectedParams, setSelectedParams] = useState([]);
-  const [linked, setLinked] = useState([]);
+  // Тут храним ID параметров, УЖЕ привязанных к дисциплине
+  const [linkedParams, setLinkedParams] = useState([]);
+  // Добавляем состояние загрузки
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Сбрасываем выбор дисциплины и выбранных параметров при смене вида спорта
+  // 1. Сбрасываем все, если изменился ВЕСЬ вид спорта
   useEffect(() => {
     setDisciplineId("");
-    setSelectedParams([]);
-    setLinked([]);
+    setLinkedParams([]);
   }, [sport?.id]);
 
-  const toggleParam = (id) => {
-    setSelectedParams((prev) =>
-      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
-    );
-  };
-
-  const handleSave = async () => {
-    if (!disciplineId || selectedParams.length === 0) {
-      alert("Выберите дисциплину и хотя бы один параметр.");
+  // 2. ГЛАВНАЯ НОВАЯ ЛОГИКА:
+  // Загружаем привязанные параметры, как только меняется `disciplineId`
+  useEffect(() => {
+    // Если выбрали "Выберите дисциплину" (пустое значение)
+    if (!disciplineId) {
+      setLinkedParams([]); // Сбрасываем список
       return;
     }
+
+    const fetchLinkedParameters = async () => {
+      setIsLoading(true);
+      try {
+        const res = await axios.get(`${API}/discipline-parameters/${disciplineId}`);
+        // Превращаем массив объектов в массив ID
+        const linkedIds = res.data.lnk_discipline_parameters.map((p) => p.id);
+        setLinkedParams(linkedIds);
+      } catch (err) {
+        console.error("Ошибка при загрузке связанных параметров:", err);
+        alert("Не удалось загрузить связанные параметры.");
+        setLinkedParams([]); // Сбрасываем в случае ошибки
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchLinkedParameters();
+  }, [disciplineId]); // Зависимость - `disciplineId`
+
+  // 3. Обработчик клика по параметру (добавление/удаление)
+  const handleParamClick = async (paramId) => {
+    // Не даем кликать, пока не выбрана дисциплина
+    if (!disciplineId) return;
+
+    const isLinked = linkedParams.includes(paramId);
+    const originalLinkedParams = [...linkedParams]; // Сохраняем для отката
+
+    let action;
+    let optimismUI;
+
+    if (isLinked) {
+      // --- Логика УДАЛЕНИЯ ---
+      action = 'unlink';
+      // Оптимистично убираем из UI
+      optimismUI = () => setLinkedParams((prev) => prev.filter((id) => id !== paramId));
+    } else {
+      // --- Логика ДОБАВЛЕНИЯ ---
+      action = 'link';
+      // Оптимистично добавляем в UI
+      optimismUI = () => setLinkedParams((prev) => [...prev, paramId]);
+    }
+
+    // 1. Применяем оптимистичное обновление
+    optimismUI();
+
+    // 2. Отправляем запрос на сервер
     try {
-      const res = await axios.post(`${API}/link-parameters`, {
-        discipline_id: parseInt(disciplineId),
-        parameter_ids: selectedParams,
-      });
-      setLinked(res.data.inserted || []);
-      setSelectedParams([]);
+      if (action === 'link') {
+        await axios.post(`${API}/link-parameters`, {
+          discipline_id: parseInt(disciplineId),
+          parameter_ids: [paramId], // Отправляем массив с одним ID
+        });
+      } else if (action === 'unlink') {
+        await axios.delete(`${API}/link-parameters`, {
+          data: {
+            discipline_id: parseInt(disciplineId),
+            parameter_id: paramId,
+          },
+        });
+      }
+
+      // Если родительский компонент слушает изменения
       if (onChange) onChange();
+
     } catch (err) {
-      console.error("Ошибка при сохранении связей:", err);
-      alert("Ошибка при сохранении. Посмотрите консоль.");
+      console.error(`Ошибка при ${action === 'link' ? 'добавлении' : 'удалении'} связи:`, err);
+      alert("Ошибка при обновлении связи. Изменения будут отменены.");
+      // 3. В случае ошибки — ОТКАТЫВАЕМ UI
+      setLinkedParams(originalLinkedParams);
     }
   };
 
-  // Если sport не передан — показываем подсказку (доп. защита)
+  // --- Рендеринг ---
+
   if (!sport) {
     return (
       <div>
@@ -53,7 +111,6 @@ export default function LinkManager({ disciplines = [], parameters = [], onChang
     );
   }
 
-  // фильтруем дисциплины, оставляя только те, что принадлежат текущему виду спорта
   const disciplinesForSport = (disciplines || []).filter((d) => d.sport_id === sport.id);
 
   return (
@@ -73,47 +130,41 @@ export default function LinkManager({ disciplines = [], parameters = [], onChang
         ))}
       </select>
 
+      {/* Индикатор загрузки */}
+      {isLoading && <div className="text-sm text-gray-500 mb-2">Загрузка параметров...</div>}
+
       <div className="grid grid-cols-2 gap-2 mb-4">
-        {(parameters || []).map((p) => (
-          <label key={p.id} className="flex items-center gap-2 border p-2 rounded">
-            <input
-              type="checkbox"
-              checked={selectedParams.includes(p.id)}
-              onChange={() => toggleParam(p.id)}
-            />
-            <span>
-              {p.parameter_type_name}: {p.parameter_value}
-            </span>
-          </label>
-        ))}
+        {(parameters || []).map((p) => {
+          // Проверяем, привязан ли этот параметр
+          const isLinked = linkedParams.includes(p.id);
+
+          // Динамически назначаем классы
+          const labelClass = `
+            flex items-center gap-2 border p-2 rounded
+            ${!disciplineId ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+            ${isLinked ? 'bg-green-100 border-green-400 font-medium' : 'bg-white'}
+          `;
+
+          return (
+            <label key={p.id} className={labelClass}>
+              <input
+                type="checkbox"
+                // Блокируем, если не выбрана дисциплина или идет загрузка
+                disabled={!disciplineId || isLoading}
+                // Состояние чекбокса = привязан или нет
+                checked={isLinked}
+                // При изменении вызываем наш новый обработчик
+                onChange={() => handleParamClick(p.id)}
+              />
+              <span>
+                {p.parameter_type_name}: {p.parameter_value}
+              </span>
+            </label>
+          );
+        })}
       </div>
 
-      <div className="flex gap-2">
-        <button onClick={handleSave} className="bg-green-600 text-white px-4 py-2 rounded">
-          💾 Сохранить связь
-        </button>
-
-        <button
-          onClick={() => {
-            setDisciplineId("");
-            setSelectedParams([]);
-          }}
-          className="bg-gray-200 px-4 py-2 rounded"
-        >
-          Сбросить
-        </button>
-      </div>
-
-      {linked.length > 0 && (
-        <div className="mt-4 bg-green-50 border p-3 rounded">
-          <h4 className="font-semibold mb-2">Добавлены связи:</h4>
-          <ul className="list-disc pl-5 text-sm">
-            {linked.map((l, i) => (
-              <li key={i}>Параметр ID {l.parameter_id}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* Кнопки "Сохранить" и "Сбросить" больше не нужны */}
     </div>
   );
 }

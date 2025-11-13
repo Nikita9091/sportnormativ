@@ -57,8 +57,8 @@ def row_to_dict(row, cursor=None):
 # ====== Pydantic модели для входящих POST-запросов ======
 class DisciplinesIn(BaseModel):
     sport_id: int
-    discipline_names: List[str] = Field(..., min_items=1)
-    discipline_codes: List[str] = Field(..., min_items=1)
+    discipline_names: List[str]
+    discipline_codes: List[str]
 
 
 class ParameterTypeIn(BaseModel):
@@ -73,22 +73,27 @@ class ParameterIn(BaseModel):
 
 class LinkParametersIn(BaseModel):
     discipline_id: int
-    parameter_ids: List[int] = Field(..., min_items=1)
+    parameter_ids: List[int]
 
 
-class NormativeRankEntry(BaseModel):
+class RankEntry(BaseModel):
     rank_id: int
-    requirement_id: int
-    condition_value: str
-    sorting: Optional[int] = None
-    remark: Optional[str] = ""
+    condition_value: Optional[str] = None # Optional, т.к. пользователь может не ввести значение
 
 
 class CreateNormativeIn(BaseModel):
+    """
+    Схема для входящего POST /normatives запроса
+    """
     discipline_id: int
-    ldp_ids: List[int]       # id связей дисциплины с параметрами (lnk_discipline_parameters)
-    requirement_id: int      # id из ref_requirements
-    rank_entries: List[NormativeRankEntry]
+    ldp_ids: List[int] # ID из таблицы lnk_discipline_parameters
+    requirement_id: int
+    rank_entries: List[RankEntry]
+
+
+class LinkDeletePayload(BaseModel):
+    discipline_id: int
+    parameter_id: int
 
 
 # ====== GET /sports - список всех видов спорта ======
@@ -435,88 +440,6 @@ def link_parameters(payload: LinkParametersIn):
     return {"inserted": inserted, "errors": errors}
 
 
-@app.post("/normatives")
-def add_normatives(payload: CreateNormativeIn):
-    conn = get_conn()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-
-    # --- Проверка дисциплины ---
-    cur.execute("SELECT id FROM ref_disciplines WHERE id = %s", (payload.discipline_id,))
-    if not cur.fetchone():
-        conn.close()
-        raise HTTPException(status_code=400, detail=f"discipline_id {payload.discipline_id} not found")
-
-    # --- Проверка lnk_discipline_parameters ---
-    for ldp_id in payload.ldp_ids:
-        cur.execute("SELECT discipline_id FROM lnk_discipline_parameters WHERE id = %s", (ldp_id,))
-        row = cur.fetchone()
-        if not row:
-            conn.close()
-            raise HTTPException(status_code=400, detail=f"lnk_discipline_parameters id {ldp_id} not found")
-        if row["discipline_id"] != payload.discipline_id:
-            conn.close()
-            raise HTTPException(status_code=400, detail=f"ldp_id {ldp_id} does not belong to discipline_id {payload.discipline_id}")
-
-    # --- Проверка requirement ---
-    cur.execute("SELECT id FROM ref_requirements WHERE id = %s", (payload.requirement_id,))
-    if not cur.fetchone():
-        conn.close()
-        raise HTTPException(status_code=400, detail=f"requirement_id {payload.requirement_id} not found")
-
-    created = []
-    errors = []
-
-    try:
-        for entry in payload.rank_entries:
-            # Пропускаем пустые поля (если пользователь не заполнил значение)
-            if not entry.condition_value:
-                continue
-
-            # Проверяем, что rank существует
-            cur.execute("SELECT id FROM ref_ranks WHERE id = %s", (entry.rank_id,))
-            if not cur.fetchone():
-                errors.append({"rank_id": entry.rank_id, "error": "rank not found"})
-                continue
-
-            # --- 1️⃣ Создаём запись в normatives ---
-            cur.execute("""
-                INSERT INTO normatives (rank_id)
-                VALUES (%s)
-                RETURNING id
-            """, (entry.rank_id,))
-            normative_id = cur.fetchone()["id"]
-
-            # --- 2️⃣ Связываем с параметрами ---
-            for ldp_id in payload.ldp_ids:
-                cur.execute("""
-                    INSERT INTO groups (discipline_parameter_id, normative_id)
-                    VALUES (%s, %s)
-                """, (ldp_id, normative_id))
-
-            # --- 3️⃣ Добавляем условие (норму) ---
-            cur.execute("""
-                INSERT INTO conditions (normative_id, requirement_id, condition)
-                VALUES (%s, %s, %s)
-            """, (normative_id, payload.requirement_id, entry.condition_value))
-
-            created.append({
-                "normative_id": normative_id,
-                "rank_id": entry.rank_id,
-                "requirement_id": payload.requirement_id,
-                "condition_value": entry.condition_value,
-                "linked_ldp_ids": payload.ldp_ids
-            })
-
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        conn.close()
-        raise HTTPException(status_code=500, detail=f"Database error: {e}")
-
-    conn.close()
-    return {"created": created, "errors": errors}
-
-
 # ====== Дополнительные вспомогательные эндпоинты ======
 @app.get("/disciplines/json")
 def list_disciplines_json():
@@ -568,17 +491,21 @@ def list_ldp_json():
     conn.close()
     return {"lnk_discipline_parameters": rows}
 
-''
 @app.get("/discipline-parameters/{id}")
 def list_ldp_(id: int):
     conn = get_conn()
     cur = conn.cursor()
     cur.execute("""
-    SELECT p.parameter_value
-    FROM lnk_discipline_parameters l
-    LEFT JOIN ref_disciplines d ON l.discipline_id = d.id
-    LEFT JOIN ref_parameters p ON l.parameter_id = p.id
-    WHERE l.discipline_id = %s
+    SELECT 
+        l.id AS ldp_id, p.id, p.parameter_type_id, p.parameter_value
+    FROM 
+        lnk_discipline_parameters l
+    LEFT JOIN 
+        ref_disciplines d ON l.discipline_id = d.id
+    LEFT JOIN 
+        ref_parameters p ON l.parameter_id = p.id
+    WHERE 
+        l.discipline_id = %s
     """, (id,))
     rows = [row_to_dict(r) for r in cur.fetchall()]
     conn.close()
@@ -635,6 +562,57 @@ def delete_parameter(id: int):
     conn.commit()
     conn.close()
     return {"deleted": id}
+
+
+@app.delete("/link-parameters")
+def delete_link(payload: LinkDeletePayload):
+    """
+    Удаляет одну конкретную связь между дисциплиной и параметром.
+    Ожидает JSON-тело вида: {"discipline_id": 1, "parameter_id": 2}
+    """
+    conn = None
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+
+        cur.execute("""
+            DELETE FROM lnk_discipline_parameters
+            WHERE discipline_id = %s AND parameter_id = %s
+        """, (payload.discipline_id, payload.parameter_id))
+
+        # Получаем количество удаленных строк
+        deleted_rows = cur.rowcount
+
+        conn.commit()  # <-- Самое важное! Применяем изменения (DELETE/INSERT/UPDATE)
+
+        if deleted_rows == 0:
+            # Это не ошибка. Это значит, что такой связи уже не было.
+            # Для React-компонента это все равно "успех".
+            return {
+                "status": "not_found",
+                "message": "Связь не найдена или уже удалена."
+            }
+
+        return {
+            "status": "deleted",
+            "discipline_id": payload.discipline_id,
+            "parameter_id": payload.parameter_id
+        }
+
+    except (Exception, psycopg2.Error) as error:
+        print("Ошибка при удалении связи:", error)
+        if conn:
+            conn.rollback()  # Откатываем изменения в случае ошибки
+
+        raise HTTPException(
+            status_code=500,
+            detail="Внутренняя ошибка сервера при удалении связи."
+        )
+
+    finally:
+        if conn:
+            cur.close()
+            conn.close()
 
 
 # ====== Домашняя страница ======

@@ -151,8 +151,7 @@ function MainApp() {
                       )}
                       {tab.key === "paramTypes" && (
                         <tab.component 
-                          onChange={reloadAll} 
-                          disciplines={disciplines}
+                          onChange={reloadAll}
                         />
                       )}
                       {tab.key === "parameters" && (
@@ -170,7 +169,12 @@ function MainApp() {
                         />
                       )}
                       {tab.key === "normatives" && (
-                        <tab.component sport={selectedSport} />
+                        <tab.component
+                          disciplines={disciplines}
+                          parameters={parameters}
+                          onChange={reloadAll}
+                          sport={selectedSport}
+                        />
                       )}
                     </div>
                   </div>

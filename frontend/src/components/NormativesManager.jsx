@@ -4,182 +4,299 @@ import API_CONFIG from '../config/api';
 
 const API = API_CONFIG.baseURL;
 
-export default function NormativesManager({ sport }) {
-  const [disciplines, setDisciplines] = useState([]);
-  const [selectedDiscipline, setSelectedDiscipline] = useState("");
-  const [params, setParams] = useState([]); // параметры дисциплины (lnk_discipline_parameters)
-  const [selectedParams, setSelectedParams] = useState([]);
-  const [requirements, setRequirements] = useState([]);
-  const [selectedRequirement, setSelectedRequirement] = useState("");
-  const [rankValues, setRankValues] = useState(Array(9).fill("")); // значения для 9 разрядов
-  const [ranks, setRanks] = useState([]);
+// Утилита для сброса формы
+const getInitialFormState = () => ({
+  requirementId: "",
+  selectedParamIds: [],
+  rankValues: {}, // { rank_id_1: "value", rank_id_2: "value" }
+});
 
-  // === Загрузка дисциплин данного вида спорта ===
+export default function NormativesManager({
+  sport,
+  disciplines = [],
+  requirements = [],
+  ranks = [],
+  onChange
+}) {
+  const [disciplineId, setDisciplineId] = useState("");
+
+  // Параметры, *привязанные* к выбранной дисциплине
+  const [disciplineParams, setDisciplineParams] = useState([]);
+
+  // Состояние для полей формы
+  const [formState, setFormState] = useState(getInitialFormState());
+
+  // Состояния для UI
+  const [isLoadingParams, setIsLoadingParams] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState({ type: "", text: "" });
+
+  // 1. Фильтруем дисциплины по спорту
+  const disciplinesForSport = (disciplines || []).filter(
+    (d) => d.sport_id === sport?.id
+  );
+
+  // 2. Сбрасываем все, если изменился вид спорта
   useEffect(() => {
-    if (!sport?.id) return;
-    axios.get(`${API}/disciplines/json`).then((r) => {
-      const filtered = (r.data.disciplines || []).filter(
-        (d) => d.sport_id === sport.id
-      );
-      setDisciplines(filtered);
-    });
-  }, [sport]);
+    setDisciplineId("");
+    setDisciplineParams([]);
+    setFormState(getInitialFormState());
+    setStatusMessage({ type: "", text: "" });
+  }, [sport?.id]);
 
-  // === Загрузка всех разрядов ===
+  // 3. Загружаем параметры при смене ДИСЦИПЛИНЫ
   useEffect(() => {
-    axios.get(`${API}/ranks/json`).then((r) => setRanks(r.data.ranks || []));
-  }, []);
+    // Сбрасываем все, кроме 'disciplineId'
+    setDisciplineParams([]);
+    setFormState(getInitialFormState());
+    setStatusMessage({ type: "", text: "" });
 
-  // === Загрузка требований ===
-  useEffect(() => {
-    axios.get(`${API}/requirements/json`).then((r) => {
-      setRequirements(r.data.requirements || []);
-    });
-  }, []);
-
-  // === Загрузка параметров дисциплины ===
-  const loadDisciplineParams = async (disciplineId) => {
     if (!disciplineId) return;
-    const r = await axios.get(`${API}/discipline-parameters/${disciplineId}`);
-    setParams(r.data.parameters || []);
-  };
 
-  // === При выборе дисциплины ===
+    const fetchParams = async () => {
+      setIsLoadingParams(true);
+      try {
+        const res = await axios.get(`${API}/discipline-parameters/${disciplineId}`);
+        setDisciplineParams(res.data.lnk_discipline_parameters || []);
+      } catch (err) {
+        console.error("Ошибка при загрузке параметров дисциплины:", err);
+        setStatusMessage({ type: "error", text: "Не удалось загрузить параметры" });
+      } finally {
+        setIsLoadingParams(false);
+      }
+    };
+
+    fetchParams();
+  }, [disciplineId]);
+
+  // --- ОБРАБОТЧИКИ ФОРМЫ ---
+
   const handleDisciplineChange = (e) => {
-    const id = e.target.value;
-    setSelectedDiscipline(id);
-    setSelectedParams([]);
-    loadDisciplineParams(id);
+    setDisciplineId(e.target.value);
   };
 
-  // === Обработка чекбоксов параметров ===
-  const toggleParam = (id) => {
-    setSelectedParams((prev) =>
-      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
-    );
+  const toggleParam = (ldpId) => {
+    setFormState((prev) => ({
+      ...prev,
+      selectedParamIds: prev.selectedParamIds.includes(ldpId)
+        ? prev.selectedParamIds.filter((id) => id !== ldpId)
+        : [...prev.selectedParamIds, ldpId],
+    }));
   };
 
-  // === Изменение значений норм по разрядам ===
-  const handleRankChange = (index, value) => {
-    const updated = [...rankValues];
-    updated[index] = value;
-    setRankValues(updated);
+  const handleRequirementChange = (e) => {
+    setFormState((prev) => ({ ...prev, requirementId: e.target.value }));
   };
 
-  // === Отправка данных ===
-  const handleSubmit = async () => {
-    if (!selectedDiscipline || !selectedRequirement || selectedParams.length === 0) {
-      alert("Выберите дисциплину, параметры и требование.");
+  const handleRankValueChange = (rankId, value) => {
+    setFormState((prev) => ({
+      ...prev,
+      rankValues: {
+        ...prev.rankValues,
+        [rankId]: value, // Динамически обновляем значение по 'rankId'
+      },
+    }));
+  };
+
+  // --- ОТПРАВКА ФОРМЫ ---
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setStatusMessage({ type: "", text: "" });
+
+    // --- Валидация ---
+    if (!disciplineId || !formState.requirementId || formState.selectedParamIds.length === 0) {
+      setStatusMessage({ type: "error", text: "Выберите дисциплину, требование и хотя бы один параметр." });
       return;
     }
 
-    const rankEntries = ranks.map((r, i) => ({
-      rank_id: r.id,
-      condition_value: rankValues[i] || "",
+    // Преобразуем { rank_id: "value" } в [{ rank_id: ..., condition_value: "..." }]
+    const rankEntries = Object.keys(formState.rankValues).map((rankId) => ({
+      rank_id: parseInt(rankId),
+      condition_value: formState.rankValues[rankId] || null, // Отправляем null, если строка пустая
     }));
 
+    // Отфильтруем те, где значение не введено (хотя бэкенд это и так делает)
+    const validRankEntries = rankEntries.filter(entry => entry.condition_value);
+
+    if (validRankEntries.length === 0) {
+      setStatusMessage({ type: "error", text: "Введите значение хотя бы для одного разряда." });
+      return;
+    }
+
+    // --- Формируем тело запроса ---
     const payload = {
-      discipline_id: parseInt(selectedDiscipline),
-      ldp_ids: selectedParams,
-      requirement_id: parseInt(selectedRequirement),
-      rank_entries: rankEntries,
+      discipline_id: parseInt(disciplineId),
+      ldp_ids: formState.selectedParamIds,
+      requirement_id: parseInt(formState.requirementId),
+      rank_entries: validRankEntries,
     };
 
+    // --- Отправка ---
+    setIsSubmitting(true);
     try {
       const res = await axios.post(`${API}/normatives`, payload);
-      alert(`✅ Добавлено ${res.data.created.length} нормативов`);
-      setRankValues(Array(9).fill(""));
+
+      const createdCount = res.data.created?.length || 0;
+      const errorCount = res.data.errors?.length || 0;
+
+      setStatusMessage({
+        type: "success",
+        text: `Успешно добавлено нормативов: ${createdCount}. Ошибок: ${errorCount}.`,
+      });
+
+      // Сбрасываем форму
+      setFormState(getInitialFormState());
+
+      // Уведомляем родителя (если нужно)
+      if (onChange) onChange();
+
     } catch (err) {
-      console.error(err);
-      alert("Ошибка при добавлении норматива.");
+      console.error("Ошибка при добавлении норматива:", err);
+      const errorDetail = err.response?.data?.detail || "Неизвестная ошибка сервера.";
+      setStatusMessage({ type: "error", text: `Ошибка: ${errorDetail}` });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
+  // --- РЕНДЕРИНГ ---
+
+  if (!sport) {
+    return (
+      <div>
+        <h3 className="font-semibold mb-3">Добавление норматива</h3>
+        <div className="text-sm text-gray-600">
+          Сначала выберите вид спорта (вверху).
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <h3 className="font-semibold mb-4 text-lg">Добавление норматива</h3>
+      <form onSubmit={handleSubmit} className="space-y-6">
 
-      {/* === Выбор дисциплины === */}
-      <div className="mb-4">
-        <label className="block text-sm font-medium mb-1">Дисциплина:</label>
-        <select
-          className="border p-2 rounded w-full"
-          value={selectedDiscipline}
-          onChange={handleDisciplineChange}
-        >
-          <option value="">— выберите дисциплину —</option>
-          {disciplines.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.discipline_name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* === Выбор параметров === */}
-      {params.length > 0 && (
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-1">Параметры дисциплины:</label>
-          <div className="flex flex-wrap gap-3 border rounded p-3 bg-gray-50">
-            {params.map((p) => (
-              <label key={p.id} className="flex items-center gap-1 text-sm">
-                <input
-                  type="checkbox"
-                  checked={selectedParams.includes(p.id)}
-                  onChange={() => toggleParam(p.id)}
-                />
-                {p.parameter_type_name}: {p.parameter_value}
-              </label>
+        {/* --- 1. ВЫБОР ДИСЦИПЛИНЫ --- */}
+        <section>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            1. Выберите дисциплину
+          </label>
+          <select
+            className="border p-2 rounded w-full"
+            onChange={handleDisciplineChange}
+            value={disciplineId}
+          >
+            <option value="">Выберите...</option>
+            {disciplinesForSport.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.discipline_name}
+              </option>
             ))}
-          </div>
-        </div>
-      )}
+          </select>
+        </section>
 
-      {/* === Выбор требования === */}
-      <div className="mb-4">
-        <label className="block text-sm font-medium mb-1">Требование:</label>
-        <select
-          className="border p-2 rounded w-full"
-          value={selectedRequirement}
-          onChange={(e) => setSelectedRequirement(e.target.value)}
-        >
-          <option value="">— выберите требование —</option>
-          {requirements.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.requirement_value}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* === Поля для разрядов === */}
-      <div className="mb-6">
-        <label className="block text-sm font-medium mb-2">
-          Введите значения нормы для каждого разряда:
-        </label>
-        <div className="grid grid-cols-3 gap-2">
-          {ranks.map((r, i) => (
-            <div key={r.id} className="flex flex-col">
-              <label className="text-xs text-gray-600 mb-1">{r.short_name}</label>
-              <input
-                type="text"
-                value={rankValues[i]}
-                onChange={(e) => handleRankChange(i, e.target.value)}
-                className="border p-2 rounded"
-                placeholder="Введите значение"
-              />
+        {/* --- 2. ВЫБОР ПАРАМЕТРОВ (зависит от дисциплины) --- */}
+        {disciplineId && (
+          <section>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              2. Отметьте параметры (для этой группы нормативов)
+            </label>
+            {isLoadingParams && <div className="text-sm">Загрузка параметров...</div>}
+            {!isLoadingParams && disciplineParams.length === 0 && (
+              <div className="text-sm text-gray-500">
+                Для этой дисциплины не найдено связанных параметров. (Сначала настройте их во вкладке "Связь")
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              {disciplineParams.map((p) => (
+                <label key={p.ldp_id} className="flex items-center gap-2 border p-2 rounded cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formState.selectedParamIds.includes(p.ldp_id)}
+                    onChange={() => toggleParam(p.ldp_id)}
+                  />
+                  <span>
+                    {p.parameter_type_name}: {p.parameter_value} (ID: {p.ldp_id})
+                  </span>
+                </label>
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
+          </section>
+        )}
 
-      {/* === Кнопка добавления === */}
-      <button
-        onClick={handleSubmit}
-        className="bg-green-600 text-white px-5 py-2 rounded hover:bg-green-700"
-      >
-        ➕ Добавить норматив
-      </button>
+        {/* --- 3. ВЫБОР ТРЕБОВАНИЯ --- */}
+        {disciplineId && (
+          <section>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              3. Выберите требование
+            </label>
+            <select
+              className="border p-2 rounded w-full"
+              onChange={handleRequirementChange}
+              value={formState.requirementId}
+            >
+              <option value="">Выберите...</option>
+              {requirements.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.requirement_name}
+                </option>
+              ))}
+            </select>
+          </section>
+        )}
+
+        {/* --- 4. ВВОД ЗНАЧЕНИЙ ПО РАЗРЯДАМ --- */}
+        {disciplineId && (
+          <section>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              4. Введите значения нормативов
+            </label>
+            <div className="space-y-2">
+              {ranks.map((rank) => (
+                <div key={rank.id} className="grid grid-cols-3 gap-2 items-center">
+                  <span className="text-sm font-medium text-gray-600">
+                    {rank.rank_name}
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Напр: 10.5"
+                    className="border p-2 rounded col-span-2"
+                    value={formState.rankValues[rank.id] || ""}
+                    onChange={(e) => handleRankValueChange(rank.id, e.target.value)}
+                  />
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* --- 5. КНОПКА И СТАТУС --- */}
+        {disciplineId && (
+          <section className="pt-4 border-t">
+            <button
+              type="submit"
+              className="bg-blue-600 text-white px-5 py-2 rounded font-medium hover:bg-blue-700 disabled:opacity-50"
+              disabled={isSubmitting || isLoadingParams}
+            >
+              {isSubmitting ? "Добавление..." : "Добавить норматив"}
+            </button>
+
+            {statusMessage.text && (
+              <div
+                className={`mt-3 p-3 rounded text-sm ${
+                  statusMessage.type === 'success'
+                    ? 'bg-green-50 text-green-800 border border-green-200'
+                    : 'bg-red-50 text-red-800 border border-red-200'
+                }`}
+              >
+                {statusMessage.text}
+              </div>
+            )}
+          </section>
+        )}
+
+      </form>
     </div>
   );
 }
