@@ -5,8 +5,9 @@ import DisciplinesManager from "./components/DisciplinesManager";
 import ParamTypeManager from "./components/ParamTypeManager";
 import ParameterManager from "./components/ParameterManager";
 import LinkManager from "./components/LinkManager";
-import NormativesManager from "./components/NormativesManager";
-import NormativesPage from "./components/NormativesPage";
+import NormativeManager from "./components/NormativeManager";
+import NormativePage from "./components/NormativePage";
+import RequirementManager from "./components/RequirementManager"
 import API_CONFIG from './config/api';
 
 const API = API_CONFIG.baseURL;
@@ -25,13 +26,17 @@ function MainApp() {
   const [disciplines, setDisciplines] = useState([]);
   const [paramTypes, setParamTypes] = useState([]);
   const [parameters, setParameters] = useState([]);
+  // const [requireTypes, setRequireTypes] = useState([]);
+  // const [requirements, setRequirements] = useState([]);
 
   // загрузка всех справочников
   const reloadAll = async () => {
-    const [disc, params, types] = await Promise.all([
+    const [disc, params, types, requires, require_types] = await Promise.all([
       axios.get(`${API}/disciplines/json`),
       axios.get(`${API}/parameters/json`),
-      axios.get(`${API}/parameter_types/json`)
+      axios.get(`${API}/parameter_types/json`),
+      axios.get(`${API}/requirements/json`),
+      axios.get(`${API}/requirement_types/json`)
     ]);
     setDisciplines(disc.data.disciplines || []);
     setParameters(params.data.parameters || []);
@@ -55,7 +60,8 @@ function MainApp() {
     { key: "paramTypes", label: "Типы параметров", icon: "📊", component: ParamTypeManager },
     { key: "parameters", label: "Параметры", icon: "⚙️", component: ParameterManager },
     { key: "links", label: "Связи", icon: "🔗", component: LinkManager },
-    { key: "normatives", label: "Добавление нормативов", icon: "➕", component: NormativesManager }
+    { key: "requires", label: "Требования", icon: "🔗", component: RequirementManager },
+    { key: "normatives", label: "Добавление нормативов", icon: "➕", component: NormativeManager }
   ];
 
   return (
@@ -81,6 +87,7 @@ function MainApp() {
                 paramTypes: false,
                 parameters: false,
                 links: false,
+                requires: false,
                 normatives: false
               });
             }}
@@ -168,10 +175,16 @@ function MainApp() {
                           sport={selectedSport}
                         />
                       )}
+                      {tab.key === "requires" && (
+                        <tab.component
+                          onChange={reloadAll}
+                        />
+                      )}
                       {tab.key === "normatives" && (
                         <tab.component
                           disciplines={disciplines}
                           parameters={parameters}
+                          // requires={requirements}
                           onChange={reloadAll}
                           sport={selectedSport}
                         />
@@ -192,7 +205,7 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/normatives/:sport_id" element={<NormativesPage />} />
+        <Route path="/normatives/:sport_id" element={<NormativePage />} />
         <Route path="/" element={<MainApp />} />
       </Routes>
     </Router>

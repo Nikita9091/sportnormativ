@@ -71,6 +71,12 @@ class ParameterIn(BaseModel):
     remark: Optional[str] = ""
 
 
+class RequirementIn(BaseModel):
+    requirement_type_id: int
+    requirement_value: str
+    description: Optional[str] = ""
+
+
 class LinkParametersIn(BaseModel):
     discipline_id: int
     parameter_ids: List[int]
@@ -399,6 +405,35 @@ def add_parameter(payload: ParameterIn):
     return {"id": pid, "parameter_value": payload.parameter_value, "parameter_type_id": payload.parameter_type_id}
 
 
+# ====== POST /requirements - добавить значение требования ======
+@app.post("/requirements")
+def add_requirement(payload: RequirementIn):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM ref_requirements_types WHERE id = %s", (payload.requirement_type_id,))
+    if not cur.fetchone():
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"requirement_type_id {payload.requirement_type_id} not found")
+
+    try:
+        cur.execute("""INSERT INTO ref_requirements (requirement_type_id, requirement_value) 
+                      VALUES (%s, %s) RETURNING id""",
+                    (payload.requirement_type_id, payload.requirement_value.strip()))
+        row = cur.fetchone()
+        pid = row["id"]
+        conn.commit()
+    except Exception as e:
+        if "unique" in str(e).lower():
+            cur.execute("SELECT id FROM ref_requirements WHERE requirement_type_id = %s AND requirement_value = %s",
+                        (payload.parameter_type_id, payload.parameter_value.strip()))
+            row = cur.fetchone()
+            pid = row["id"] if row else None
+        else:
+            pid = None
+    conn.close()
+    return {"id": pid, "parameter_value": payload.requirement_value, "parameter_type_id": payload.requirement_type_id}
+
+
 # ====== POST /link-parameters - привязать параметры к дисциплине ======
 @app.post("/link-parameters")
 def link_parameters(payload: LinkParametersIn):
@@ -440,6 +475,94 @@ def link_parameters(payload: LinkParametersIn):
     return {"inserted": inserted, "errors": errors}
 
 
+# --- Твой эндпоинт POST /normatives (почти без изменений) ---
+
+@app.post("/normatives")
+def add_normatives(payload: CreateNormativeIn):
+    conn = get_conn()
+    cur = conn.cursor() # RealDictCursor уже применен в get_conn
+
+    # --- Проверка дисциплины ---
+    cur.execute("SELECT id FROM ref_disciplines WHERE id = %s", (payload.discipline_id,))
+    if not cur.fetchone():
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"discipline_id {payload.discipline_id} not found")
+
+    # --- Проверка lnk_discipline_parameters ---
+    # (Ты используешь ldp_id, что АБСОЛЮТНО ВЕРНО,
+    # т.к. 'group' ссылается на 'lnk_discipline_parameters')
+    for ldp_id in payload.ldp_ids:
+        cur.execute("SELECT discipline_id FROM lnk_discipline_parameters WHERE id = %s", (ldp_id,))
+        row = cur.fetchone()
+        if not row:
+            conn.close()
+            raise HTTPException(status_code=400, detail=f"lnk_discipline_parameters id {ldp_id} not found")
+        if row["discipline_id"] != payload.discipline_id:
+            conn.close()
+            raise HTTPException(status_code=400, detail=f"ldp_id {ldp_id} does not belong to discipline_id {payload.discipline_id}")
+
+    # --- Проверка requirement ---
+    cur.execute("SELECT id FROM ref_requirements WHERE id = %s", (payload.requirement_id,))
+    if not cur.fetchone():
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"requirement_id {payload.requirement_id} not found")
+
+    created = []
+    errors = []
+
+    try:
+        for entry in payload.rank_entries:
+            # Пропускаем пустые поля (если пользователь не заполнил значение)
+            if not entry.condition_value:
+                continue
+
+            # Проверяем, что rank существует
+            cur.execute("SELECT id FROM ref_ranks WHERE id = %s", (entry.rank_id,))
+            if not cur.fetchone():
+                errors.append({"rank_id": entry.rank_id, "error": "rank not found"})
+                continue
+
+            # --- 1️⃣ Создаём запись в normatives ---
+            # (rank_id теперь вставляется сразу)
+            cur.execute("""
+                INSERT INTO normatives (rank_id)
+                VALUES (%s)
+                RETURNING id
+            """, (entry.rank_id,))
+            normative_id = cur.fetchone()["id"]
+
+            # --- 2️⃣ Связываем с параметрами (из lnk_discipline_parameters) ---
+            for ldp_id in payload.ldp_ids:
+                cur.execute("""
+                    INSERT INTO groups (discipline_parameter_id, normative_id)
+                    VALUES (%s, %s)
+                """, (ldp_id, normative_id))
+
+            # --- 3️⃣ Добавляем условие (норму) ---
+            cur.execute("""
+                INSERT INTO conditions (normative_id, requirement_id, condition)
+                VALUES (%s, %s, %s)
+            """, (normative_id, payload.requirement_id, entry.condition_value))
+
+            created.append({
+                "normative_id": normative_id,
+                "rank_id": entry.rank_id,
+                "requirement_id": payload.requirement_id,
+                "condition_value": entry.condition_value,
+                "linked_ldp_ids": payload.ldp_ids
+            })
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        # В рабочей версии лучше логировать 'e' и не показывать его пользователю
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+    conn.close()
+    return {"created": created, "errors": errors}
+
+
 # ====== Дополнительные вспомогательные эндпоинты ======
 @app.get("/disciplines/json")
 def list_disciplines_json():
@@ -474,6 +597,16 @@ def list_parameter_types_json():
     rows = [row_to_dict(r) for r in cur.fetchall()]
     conn.close()
     return {"parameter_types": rows}
+
+
+@app.get("/requirement_types/json")
+def list_requirement_types_json():
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, type_name AS requirement_type_name FROM ref_requirements_types")
+    rows = [row_to_dict(r) for r in cur.fetchall()]
+    conn.close()
+    return {"requirements_types": rows}
 
 
 @app.get("/ldp/json")
@@ -526,8 +659,12 @@ def list_ranks_json():
 def list_requirements_json():
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute(
-        "SELECT id, requirement_type_id, requirement_value, description FROM ref_requirements ORDER BY requirement_type_id")
+    cur.execute("""
+    SELECT p.id, p.requirement_type_id, t.type_name AS requirement_type_name, p.requirement_value
+    FROM ref_requirements p
+    LEFT JOIN ref_requirements_types t ON p.requirement_type_id = t.id
+    ORDER BY t.type_name, p.requirement_value
+    """)
     rows = [row_to_dict(r) for r in cur.fetchall()]
     conn.close()
     return {"requirements": rows}

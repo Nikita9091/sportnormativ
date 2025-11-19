@@ -6,19 +6,17 @@ const API = API_CONFIG.baseURL;
 
 // Утилита для сброса формы
 const getInitialFormState = () => ({
-  requirementId: "",
   selectedParamIds: [],
   rankValues: {}, // { rank_id_1: "value", rank_id_2: "value" }
 });
 
-export default function NormativesManager({
+export default function NormativeManager({
   sport,
   disciplines = [],
-  requirements = [],
-  ranks = [],
   onChange
 }) {
   const [disciplineId, setDisciplineId] = useState("");
+  const [ranks, setRanks] = useState([]);
 
   // Параметры, *привязанные* к выбранной дисциплине
   const [disciplineParams, setDisciplineParams] = useState([]);
@@ -26,10 +24,26 @@ export default function NormativesManager({
   // Состояние для полей формы
   const [formState, setFormState] = useState(getInitialFormState());
 
+  const [requires, setRequires] = useState([]);
+
   // Состояния для UI
   const [isLoadingParams, setIsLoadingParams] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState({ type: "", text: "" });
+
+  const loadRequires = async () => {
+    const r = await axios.get(`${API}/requirements/json`);
+    setRequires(r.data.requirements || []);
+  };
+  const loadRanks = async () => {
+    const r = await axios.get(`${API}/ranks/json`);
+    setRanks(r.data.ranks || []);
+  };
+
+  useEffect(() => {
+    loadRequires();
+    loadRanks();
+  }, []);
 
   // 1. Фильтруем дисциплины по спорту
   const disciplinesForSport = (disciplines || []).filter(
@@ -217,7 +231,7 @@ export default function NormativesManager({
                     onChange={() => toggleParam(p.ldp_id)}
                   />
                   <span>
-                    {p.parameter_type_name}: {p.parameter_value} (ID: {p.ldp_id})
+                    {p.parameter_value} (ID: {p.ldp_id})
                   </span>
                 </label>
               ))}
@@ -237,9 +251,9 @@ export default function NormativesManager({
               value={formState.requirementId}
             >
               <option value="">Выберите...</option>
-              {requirements.map((r) => (
+              {requires.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.requirement_name}
+                  {r.requirement_value}
                 </option>
               ))}
             </select>
@@ -256,11 +270,10 @@ export default function NormativesManager({
               {ranks.map((rank) => (
                 <div key={rank.id} className="grid grid-cols-3 gap-2 items-center">
                   <span className="text-sm font-medium text-gray-600">
-                    {rank.rank_name}
+                    {rank.short_name}
                   </span>
                   <input
                     type="text"
-                    placeholder="Напр: 10.5"
                     className="border p-2 rounded col-span-2"
                     value={formState.rankValues[rank.id] || ""}
                     onChange={(e) => handleRankValueChange(rank.id, e.target.value)}

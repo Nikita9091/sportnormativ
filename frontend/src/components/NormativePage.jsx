@@ -5,7 +5,7 @@ import API_CONFIG from '../config/api';
 
 const API = API_CONFIG.baseURL;
 
-export default function NormativesPage() {
+export default function NormativePage() {
   const { sport_id } = useParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
