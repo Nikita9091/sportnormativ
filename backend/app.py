@@ -87,14 +87,17 @@ class RankEntry(BaseModel):
     condition_value: Optional[str] = None # Optional, т.к. пользователь может не ввести значение
 
 
+class AdditionalRequirement(BaseModel):
+    type: str  # addition_type
+    value: str # addition
+
+
 class CreateNormativeIn(BaseModel):
-    """
-    Схема для входящего POST /normatives запроса
-    """
     discipline_id: int
     ldp_ids: List[int] # ID из таблицы lnk_discipline_parameters
     requirement_id: int
     rank_entries: List[RankEntry]
+    additional_requirements: List[AdditionalRequirement] = []
 
 
 class LinkDeletePayload(BaseModel):
@@ -512,55 +515,47 @@ def add_normatives(payload: CreateNormativeIn):
 
     try:
         for entry in payload.rank_entries:
-            # Пропускаем пустые поля (если пользователь не заполнил значение)
             if not entry.condition_value:
                 continue
 
-            # Проверяем, что rank существует
-            cur.execute("SELECT id FROM ref_ranks WHERE id = %s", (entry.rank_id,))
-            if not cur.fetchone():
-                errors.append({"rank_id": entry.rank_id, "error": "rank not found"})
-                continue
-
-            # --- 1️⃣ Создаём запись в normatives ---
-            # (rank_id теперь вставляется сразу)
-            cur.execute("""
-                INSERT INTO normatives (rank_id)
-                VALUES (%s)
-                RETURNING id
-            """, (entry.rank_id,))
+            # 1. Создаем норматив
+            cur.execute("INSERT INTO normatives (rank_id) VALUES (%s) RETURNING id", (entry.rank_id,))
             normative_id = cur.fetchone()["id"]
 
-            # --- 2️⃣ Связываем с параметрами (из lnk_discipline_parameters) ---
+            # 2. Связываем с параметрами
             for ldp_id in payload.ldp_ids:
-                cur.execute("""
-                    INSERT INTO groups (discipline_parameter_id, normative_id)
-                    VALUES (%s, %s)
-                """, (ldp_id, normative_id))
+                cur.execute("INSERT INTO groups (discipline_parameter_id, normative_id) VALUES (%s, %s)",
+                            (ldp_id, normative_id))
 
-            # --- 3️⃣ Добавляем условие (норму) ---
+            # 3. Добавляем условие (conditions) - ВАЖНО: нам нужен ID условия!
             cur.execute("""
-                INSERT INTO conditions (normative_id, requirement_id, condition)
-                VALUES (%s, %s, %s)
-            """, (normative_id, payload.requirement_id, entry.condition_value))
+                    INSERT INTO conditions (normative_id, requirement_id, condition)
+                    VALUES (%s, %s, %s)
+                    RETURNING id 
+                """, (normative_id, payload.requirement_id, entry.condition_value))
 
-            created.append({
-                "normative_id": normative_id,
-                "rank_id": entry.rank_id,
-                "requirement_id": payload.requirement_id,
-                "condition_value": entry.condition_value,
-                "linked_ldp_ids": payload.ldp_ids
-            })
+            # Получаем ID созданного условия для связи с доп. требованиями
+            condition_id = cur.fetchone()["id"]
+
+            # 4. НОВОЕ: Добавляем дополнительные требования
+            if payload.additional_requirements:
+                for req in payload.additional_requirements:
+                    cur.execute("""
+                            INSERT INTO add_requirements (condition_id, addition_type, addition)
+                            VALUES (%s, %s, %s)
+                        """, (condition_id, req.type, req.value))
+
+            created.append(normative_id)
 
         conn.commit()
     except Exception as e:
         conn.rollback()
         conn.close()
-        # В рабочей версии лучше логировать 'e' и не показывать его пользователю
+        print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
     conn.close()
-    return {"created": created, "errors": errors}
+    return {"created": created}
 
 
 # ====== Дополнительные вспомогательные эндпоинты ======
@@ -696,6 +691,16 @@ def delete_parameter(id: int):
     conn = get_conn()
     cur = conn.cursor()
     cur.execute("DELETE FROM ref_parameters WHERE id = %s", (id,))
+    conn.commit()
+    conn.close()
+    return {"deleted": id}
+
+
+@app.delete("/requirements/{id}")
+def delete_requirement(id: int):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM ref_requirements WHERE id = %s", (id,))
     conn.commit()
     conn.close()
     return {"deleted": id}
