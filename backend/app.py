@@ -150,13 +150,18 @@ def get_normatives_for_sport_html(sport_id: int):
     SELECT 
         rs.sport_name AS sport_name,
         rd.discipline_name AS discipline_name,
-        STRING_AGG(rpt.type_name || ': ' || rp.parameter_value, ', ') AS discipline_parameters,
+        rd.discipline_code AS discipline_code,
+        -- Убрал DISTINCT, но оставил ORDER BY
+        STRING_AGG(rpt.type_name || ': ' || rp.parameter_value, ', ' ORDER BY rpt.type_name, rp.parameter_value) AS discipline_parameters,
         rr.short_name AS rank_short,
         rr.full_name AS rank_full,
         rr.prestige AS rank_prestige,
         rreq.requirement_value AS requirement_short,
         rreq.description AS requirement_desc,
-        c.condition AS condition_value
+        c.condition AS condition_value,
+        rr.id as rank_id,
+        rd.id as discipline_id,
+        n.id as normative_id
     FROM conditions c
     JOIN normatives n ON c.normative_id = n.id
     JOIN ref_ranks rr ON n.rank_id = rr.id
@@ -168,9 +173,10 @@ def get_normatives_for_sport_html(sport_id: int):
     JOIN ref_parameters_types rpt ON rp.parameter_type_id = rpt.id
     JOIN ref_sports rs ON rd.sport_id = rs.id
     WHERE rs.id = %s
-    GROUP BY rs.sport_name, rd.discipline_name, rr.short_name, rr.full_name, rr.prestige, 
-             rreq.requirement_value, rreq.description, c.condition
-    ORDER BY rd.discipline_name, rr.prestige
+    GROUP BY rs.sport_name, rd.discipline_name, rd.discipline_code, rr.short_name, 
+             rr.full_name, rr.prestige, rreq.requirement_value, rreq.description, 
+             c.condition, rr.id, rd.id, n.id
+    ORDER BY rd.discipline_name, rr.prestige DESC, rr.id
     """
     cur.execute(query, (sport_id,))
     rows = cur.fetchall()
@@ -223,7 +229,8 @@ def get_normatives_for_sport_json(sport_id: int):
         rs.sport_name AS sport_name,
         rd.discipline_name AS discipline_name,
         rd.discipline_code AS discipline_code,
-        STRING_AGG(rpt.type_name || ': ' || rp.parameter_value, ', ') AS discipline_parameters,
+        -- Убрал DISTINCT, но оставил ORDER BY
+        STRING_AGG(rpt.type_name || ': ' || rp.parameter_value, ', ' ORDER BY rpt.type_name, rp.parameter_value) AS discipline_parameters,
         rr.short_name AS rank_short,
         rr.full_name AS rank_full,
         rr.prestige AS rank_prestige,
@@ -231,7 +238,8 @@ def get_normatives_for_sport_json(sport_id: int):
         rreq.description AS requirement_desc,
         c.condition AS condition_value,
         rr.id as rank_id,
-        rd.id as discipline_id
+        rd.id as discipline_id,
+        n.id as normative_id
     FROM conditions c
     JOIN normatives n ON c.normative_id = n.id
     JOIN ref_ranks rr ON n.rank_id = rr.id
@@ -245,7 +253,7 @@ def get_normatives_for_sport_json(sport_id: int):
     WHERE rs.id = %s
     GROUP BY rs.sport_name, rd.discipline_name, rd.discipline_code, rr.short_name, 
              rr.full_name, rr.prestige, rreq.requirement_value, rreq.description, 
-             c.condition, rr.id, rd.id
+             c.condition, rr.id, rd.id, n.id
     ORDER BY rd.discipline_name, rr.prestige DESC, rr.id
     """
     cur.execute(query, (sport_id,))
@@ -275,7 +283,6 @@ def get_normatives_for_sport_json(sport_id: int):
             "requirement_desc": row["requirement_desc"],
             "condition_value": row["condition_value"],
             "rank_id": row["rank_id"],
-            "discipline_id": row["discipline_id"]
         })
 
     return {
@@ -479,21 +486,18 @@ def link_parameters(payload: LinkParametersIn):
 
 
 # --- Твой эндпоинт POST /normatives (почти без изменений) ---
-
 @app.post("/normatives")
 def add_normatives(payload: CreateNormativeIn):
     conn = get_conn()
-    cur = conn.cursor() # RealDictCursor уже применен в get_conn
+    cur = conn.cursor()
 
-    # --- Проверка дисциплины ---
+    # --- Существующие проверки ---
     cur.execute("SELECT id FROM ref_disciplines WHERE id = %s", (payload.discipline_id,))
     if not cur.fetchone():
         conn.close()
         raise HTTPException(status_code=400, detail=f"discipline_id {payload.discipline_id} not found")
 
     # --- Проверка lnk_discipline_parameters ---
-    # (Ты используешь ldp_id, что АБСОЛЮТНО ВЕРНО,
-    # т.к. 'group' ссылается на 'lnk_discipline_parameters')
     for ldp_id in payload.ldp_ids:
         cur.execute("SELECT discipline_id FROM lnk_discipline_parameters WHERE id = %s", (ldp_id,))
         row = cur.fetchone()
@@ -502,13 +506,50 @@ def add_normatives(payload: CreateNormativeIn):
             raise HTTPException(status_code=400, detail=f"lnk_discipline_parameters id {ldp_id} not found")
         if row["discipline_id"] != payload.discipline_id:
             conn.close()
-            raise HTTPException(status_code=400, detail=f"ldp_id {ldp_id} does not belong to discipline_id {payload.discipline_id}")
+            raise HTTPException(status_code=400,
+                                detail=f"ldp_id {ldp_id} does not belong to discipline_id {payload.discipline_id}")
 
     # --- Проверка requirement ---
     cur.execute("SELECT id FROM ref_requirements WHERE id = %s", (payload.requirement_id,))
     if not cur.fetchone():
         conn.close()
         raise HTTPException(status_code=400, detail=f"requirement_id {payload.requirement_id} not found")
+
+    # --- НОВАЯ ПРОВЕРКА: Уникальность комбинации ---
+    # Сортируем ldp_ids для consistent сравнения
+    sorted_ldp_ids = sorted(payload.ldp_ids)
+
+    # Проверяем существующие нормативы с такой же комбинацией
+    for entry in payload.rank_entries:
+        if not entry.condition_value:
+            continue
+
+        cur.execute("""
+            SELECT n.id 
+            FROM normatives n
+            JOIN conditions c ON c.normative_id = n.id
+            JOIN groups g ON g.normative_id = n.id
+            WHERE n.rank_id = %s
+            AND c.requirement_id = %s
+            AND g.discipline_parameter_id = ANY(%s)
+            GROUP BY n.id
+            HAVING COUNT(DISTINCT g.discipline_parameter_id) = %s 
+                AND array_agg(DISTINCT g.discipline_parameter_id ORDER BY g.discipline_parameter_id) = %s
+        """, (
+            entry.rank_id,
+            payload.requirement_id,
+            sorted_ldp_ids,
+            len(sorted_ldp_ids),
+            sorted_ldp_ids
+        ))
+
+        existing_normative = cur.fetchone()
+        if existing_normative:
+            conn.close()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Норматив для разряда {entry.rank_id} с параметрами {sorted_ldp_ids} уже существует (id: {existing_normative['id']})"
+            )
 
     created = []
     errors = []
@@ -527,17 +568,16 @@ def add_normatives(payload: CreateNormativeIn):
                 cur.execute("INSERT INTO groups (discipline_parameter_id, normative_id) VALUES (%s, %s)",
                             (ldp_id, normative_id))
 
-            # 3. Добавляем условие (conditions) - ВАЖНО: нам нужен ID условия!
+            # 3. Добавляем условие
             cur.execute("""
                     INSERT INTO conditions (normative_id, requirement_id, condition)
                     VALUES (%s, %s, %s)
                     RETURNING id 
                 """, (normative_id, payload.requirement_id, entry.condition_value))
 
-            # Получаем ID созданного условия для связи с доп. требованиями
             condition_id = cur.fetchone()["id"]
 
-            # 4. НОВОЕ: Добавляем дополнительные требования
+            # 4. Добавляем дополнительные требования
             if payload.additional_requirements:
                 for req in payload.additional_requirements:
                     cur.execute("""
