@@ -43,7 +43,6 @@ export default function DisciplinesManager({ sport, disciplines, onChange }) {
 
   return (
     <div>
-      <h3 className="font-semibold mb-3 text-sm sm:text-base">Дисциплины</h3>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
         <input

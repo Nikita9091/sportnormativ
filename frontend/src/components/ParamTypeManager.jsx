@@ -64,7 +64,6 @@ export default function ParamTypeManager({ onChange }) {
 
   return (
     <div>
-      <h3 className="font-semibold mb-3 text-sm sm:text-base">Типы параметров</h3>
       
       {/* Форма добавления */}
       <div className="flex flex-col sm:flex-row gap-2 mb-4">

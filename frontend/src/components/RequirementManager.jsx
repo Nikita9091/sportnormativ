@@ -96,7 +96,6 @@ export default function RequirementManager({ onChange }) {
 
   return (
     <div>
-      <h3 className="font-semibold mb-3">Требования</h3>
 
       {/* Блок добавления */}
       <div className="grid grid-cols-3 gap-2 mb-2">
