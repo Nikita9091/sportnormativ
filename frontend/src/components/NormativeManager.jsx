@@ -358,7 +358,7 @@ export default function NormativeManager({
                       <button
                         type="button"
                         onClick={() => removeAddReq(index)}
-                        className="text-red-500 hover:text-red-700 dark:hover:text-red-400 font-bold px-3 text-xl transition-colors flex items-center justify-center min-w-[40px]"
+                        className="text-red-500 hover:text-red-700 dark:hover:text-red-400 font-bold px-2 text-s transition-colors flex items-center justify-center min-w-[20px] max-h-[38px]"
                         title="Удалить"
                       >
                         ×
