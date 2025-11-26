@@ -200,7 +200,7 @@ export default function NormativePage() {
                 {/* Заголовок дисциплины с параметрами */}
                 <button
                   onClick={() => toggleDiscipline(disciplineKey)}
-                  className="w-full flex justify-between items-start p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
+                  className="w-full flex justify-between items-start p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left dark:bg-gray-800/50"
                 >
                   <div className="flex-1">
                     <div className="flex items-start gap-3">
