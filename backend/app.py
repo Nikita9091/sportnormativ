@@ -104,31 +104,7 @@ class LinkDeletePayload(BaseModel):
     discipline_id: int
     parameter_id: int
 
-
-# ====== GET /sports - список всех видов спорта ======
-@app.get("/sports", response_class=HTMLResponse)
-def get_sports_html():
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT id, sport_name FROM ref_sports ORDER BY sport_name")
-    rows = cur.fetchall()
-    conn.close()
-
-    html_rows = "".join(f'<li><a href="/sports/{r["id"]}">{html.escape(r["sport_name"])}</a></li>' for r in rows)
-    html_page = f"""
-    <html>
-      <head><meta charset="utf-8"><title>Виды спорта</title></head>
-      <body>
-        <h2>Виды спорта</h2>
-        <ul>
-          {html_rows}
-        </ul>
-        <p>API JSON: <a href="/sports/json">/sports/json</a></p>
-      </body>
-    </html>
-    """
-    return HTMLResponse(content=html_page, status_code=200)
-
+# === GET - запросы ===
 
 @app.get("/sports/json")
 def get_sports_json():
@@ -138,6 +114,112 @@ def get_sports_json():
     rows = [row_to_dict(r) for r in cur.fetchall()]
     conn.close()
     return {"sports": rows}
+
+
+@app.get("/disciplines/json")
+def list_disciplines_json():
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, sport_id, discipline_name FROM ref_disciplines ORDER BY discipline_name")
+    rows = [row_to_dict(r) for r in cur.fetchall()]
+    conn.close()
+    return {"disciplines": rows}
+
+
+@app.get("/parameters/json")
+def list_parameters_json():
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+    SELECT p.id, p.parameter_type_id, t.type_name as parameter_type_name, p.parameter_value
+    FROM ref_parameters p
+    LEFT JOIN ref_parameters_types t ON p.parameter_type_id = t.id
+    ORDER BY t.type_name, p.parameter_value
+    """)
+    rows = [row_to_dict(r) for r in cur.fetchall()]
+    conn.close()
+    return {"parameters": rows}
+
+
+@app.get("/parameter_types/json")
+def list_parameter_types_json():
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, type_name as parameter_type_name FROM ref_parameters_types")
+    rows = [row_to_dict(r) for r in cur.fetchall()]
+    conn.close()
+    return {"parameter_types": rows}
+
+
+@app.get("/requirement_types/json")
+def list_requirement_types_json():
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, type_name AS requirement_type_name FROM ref_requirements_types")
+    rows = [row_to_dict(r) for r in cur.fetchall()]
+    conn.close()
+    return {"requirements_types": rows}
+
+
+@app.get("/requirements/json")
+def list_requirements_json():
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+    SELECT p.id, p.requirement_type_id, t.type_name AS requirement_type_name, p.requirement_value
+    FROM ref_requirements p
+    LEFT JOIN ref_requirements_types t ON p.requirement_type_id = t.id
+    ORDER BY t.type_name, p.requirement_value
+    """)
+    rows = [row_to_dict(r) for r in cur.fetchall()]
+    conn.close()
+    return {"requirements": rows}
+
+
+@app.get("/ldp/json")
+def list_ldp_json():
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+    SELECT l.id, l.discipline_id, d.discipline_name, l.parameter_id, p.parameter_value
+    FROM lnk_discipline_parameters l
+    LEFT JOIN ref_disciplines d ON l.discipline_id = d.id
+    LEFT JOIN ref_parameters p ON l.parameter_id = p.id
+    ORDER BY d.discipline_name, p.parameter_value
+    """)
+    rows = [row_to_dict(r) for r in cur.fetchall()]
+    conn.close()
+    return {"lnk_discipline_parameters": rows}
+
+@app.get("/discipline-parameters/{id}")
+def list_ldp_(id: int):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+    SELECT 
+        l.id AS ldp_id, p.id, p.parameter_type_id, p.parameter_value
+    FROM 
+        lnk_discipline_parameters l
+    LEFT JOIN 
+        ref_disciplines d ON l.discipline_id = d.id
+    LEFT JOIN 
+        ref_parameters p ON l.parameter_id = p.id
+    WHERE 
+        l.discipline_id = %s
+    """, (id,))
+    rows = [row_to_dict(r) for r in cur.fetchall()]
+    conn.close()
+    return {"lnk_discipline_parameters": rows}
+
+
+@app.get("/ranks/json")
+def list_ranks_json():
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, short_name, full_name, prestige FROM ref_ranks ORDER BY prestige")
+    rows = [row_to_dict(r) for r in cur.fetchall()]
+    conn.close()
+    return {"ranks": rows}
 
 
 # ====== GET /sports/{id} - нормативы для вида спорта ======
@@ -229,8 +311,6 @@ def get_normatives_for_sport_json(sport_id: int):
         rs.sport_name AS sport_name,
         rd.discipline_name AS discipline_name,
         rd.discipline_code AS discipline_code,
-        -- Убрал DISTINCT, но оставил ORDER BY
-        STRING_AGG(rpt.type_name || ': ' || rp.parameter_value, ', ' ORDER BY rpt.type_name, rp.parameter_value) AS discipline_parameters,
         rr.short_name AS rank_short,
         rr.full_name AS rank_full,
         rr.prestige AS rank_prestige,
@@ -239,7 +319,9 @@ def get_normatives_for_sport_json(sport_id: int):
         c.condition AS condition_value,
         rr.id as rank_id,
         rd.id as discipline_id,
-        n.id as normative_id
+        n.id as normative_id,
+        rpt.type_name as param_type,
+        rp.parameter_value as param_value
     FROM conditions c
     JOIN normatives n ON c.normative_id = n.id
     JOIN ref_ranks rr ON n.rank_id = rr.id
@@ -251,11 +333,9 @@ def get_normatives_for_sport_json(sport_id: int):
     JOIN ref_parameters_types rpt ON rp.parameter_type_id = rpt.id
     JOIN ref_sports rs ON rd.sport_id = rs.id
     WHERE rs.id = %s
-    GROUP BY rs.sport_name, rd.discipline_name, rd.discipline_code, rr.short_name, 
-             rr.full_name, rr.prestige, rreq.requirement_value, rreq.description, 
-             c.condition, rr.id, rd.id, n.id
-    ORDER BY rd.discipline_name, rr.prestige DESC, rr.id
+    ORDER BY rd.discipline_name, rr.prestige DESC, rr.id, rpt.type_name
     """
+
     cur.execute(query, (sport_id,))
     rows = cur.fetchall()
     conn.close()
@@ -268,22 +348,33 @@ def get_normatives_for_sport_json(sport_id: int):
             "total_count": 0
         }
 
-    # Преобразуем в JSON-совместимый формат
-    normatives_data = []
+    # Группируем параметры по normative_id
+    normatives_dict = {}
+
     for row in rows:
-        normatives_data.append({
-            "sport_name": row["sport_name"],
-            "discipline_name": row["discipline_name"],
-            "discipline_code": row["discipline_code"],
-            "discipline_parameters": row["discipline_parameters"],
-            "rank_short": row["rank_short"],
-            "rank_full": row["rank_full"],
-            "rank_prestige": row["rank_prestige"],
-            "requirement_short": row["requirement_short"],
-            "requirement_desc": row["requirement_desc"],
-            "condition_value": row["condition_value"],
-            "rank_id": row["rank_id"],
-        })
+        normative_id = row["normative_id"]
+
+        if normative_id not in normatives_dict:
+            normatives_dict[normative_id] = {
+                "sport_name": row["sport_name"],
+                "discipline_name": row["discipline_name"],
+                "discipline_code": row["discipline_code"],
+                "discipline_parameters": {},
+                "rank_short": row["rank_short"],
+                "rank_full": row["rank_full"],
+                "rank_prestige": row["rank_prestige"],
+                "requirement_short": row["requirement_short"],
+                "requirement_desc": row["requirement_desc"],
+                "condition_value": row["condition_value"],
+                "rank_id": row["rank_id"],
+                "discipline_id": row["discipline_id"],
+            }
+
+        # Добавляем параметры
+        if row["param_type"] and row["param_value"]:
+            normatives_dict[normative_id]["discipline_parameters"][row["param_type"]] = row["param_value"]
+
+    normatives_data = list(normatives_dict.values())
 
     return {
         "sport_id": sport_id,
@@ -598,113 +689,6 @@ def add_normatives(payload: CreateNormativeIn):
     return {"created": created}
 
 
-# ====== Дополнительные вспомогательные эндпоинты ======
-@app.get("/disciplines/json")
-def list_disciplines_json():
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT id, sport_id, discipline_name FROM ref_disciplines ORDER BY discipline_name")
-    rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
-    return {"disciplines": rows}
-
-
-@app.get("/parameters/json")
-def list_parameters_json():
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("""
-    SELECT p.id, p.parameter_type_id, t.type_name as parameter_type_name, p.parameter_value
-    FROM ref_parameters p
-    LEFT JOIN ref_parameters_types t ON p.parameter_type_id = t.id
-    ORDER BY t.type_name, p.parameter_value
-    """)
-    rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
-    return {"parameters": rows}
-
-
-@app.get("/parameter_types/json")
-def list_parameter_types_json():
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT id, type_name as parameter_type_name FROM ref_parameters_types")
-    rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
-    return {"parameter_types": rows}
-
-
-@app.get("/requirement_types/json")
-def list_requirement_types_json():
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT id, type_name AS requirement_type_name FROM ref_requirements_types")
-    rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
-    return {"requirements_types": rows}
-
-
-@app.get("/ldp/json")
-def list_ldp_json():
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("""
-    SELECT l.id, l.discipline_id, d.discipline_name, l.parameter_id, p.parameter_value
-    FROM lnk_discipline_parameters l
-    LEFT JOIN ref_disciplines d ON l.discipline_id = d.id
-    LEFT JOIN ref_parameters p ON l.parameter_id = p.id
-    ORDER BY d.discipline_name, p.parameter_value
-    """)
-    rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
-    return {"lnk_discipline_parameters": rows}
-
-@app.get("/discipline-parameters/{id}")
-def list_ldp_(id: int):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("""
-    SELECT 
-        l.id AS ldp_id, p.id, p.parameter_type_id, p.parameter_value
-    FROM 
-        lnk_discipline_parameters l
-    LEFT JOIN 
-        ref_disciplines d ON l.discipline_id = d.id
-    LEFT JOIN 
-        ref_parameters p ON l.parameter_id = p.id
-    WHERE 
-        l.discipline_id = %s
-    """, (id,))
-    rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
-    return {"lnk_discipline_parameters": rows}
-
-
-@app.get("/ranks/json")
-def list_ranks_json():
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT id, short_name, full_name, prestige FROM ref_ranks ORDER BY prestige")
-    rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
-    return {"ranks": rows}
-
-
-@app.get("/requirements/json")
-def list_requirements_json():
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("""
-    SELECT p.id, p.requirement_type_id, t.type_name AS requirement_type_name, p.requirement_value
-    FROM ref_requirements p
-    LEFT JOIN ref_requirements_types t ON p.requirement_type_id = t.id
-    ORDER BY t.type_name, p.requirement_value
-    """)
-    rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
-    return {"requirements": rows}
-
-
 # ====== DELETE endpoints ======
 @app.delete("/disciplines/{id}")
 def delete_discipline(id: int):
@@ -795,26 +779,6 @@ def delete_link(payload: LinkDeletePayload):
         if conn:
             cur.close()
             conn.close()
-
-
-# ====== Домашняя страница ======
-@app.get("/", response_class=HTMLResponse)
-def index():
-    return HTMLResponse("""
-    <html><head><meta charset="utf-8"><title>SportNormativ API</title></head><body>
-      <h2>SportNormativ API</h2>
-      <ul>
-        <li><a href="/sports">Виды спорта (HTML)</a></li>
-        <li><a href="/sports/json">Виды спорта (JSON)</a></li>
-        <li><a href="/disciplines/json">Справочник дисциплин</a></li>
-        <li><a href="/parameters/json">Справочник параметров</a></li>
-        <li><a href="/ldp/json">Связки дисциплина-параметр (lnk_discipline_parameters)</a></li>
-        <li><a href="/ranks/json">Разряды (ref_ranks)</a></li>
-        <li><a href="/requirements/json">Требования (ref_requirements)</a></li>
-      </ul>
-      <p>POST endpoints (JSON): /disciplines, /parameter-types, /parameters, /link-parameters, /normatives</p>
-    </body></html>
-    """, status_code=200)
 
 
 if __name__ == "__main__":
