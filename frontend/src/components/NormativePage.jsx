@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import axios from "axios";
 import API_CONFIG from '../config/api';
@@ -11,6 +11,14 @@ export default function NormativePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedDisciplines, setExpandedDisciplines] = useState({});
+
+  // Состояния фильтров - теперь для каждого типа параметра свой фильтр
+  const [filters, setFilters] = useState({
+    discipline: '',
+    rank: '',
+    // Динамические фильтры для каждого типа параметра
+    parameterFilters: {}
+  });
 
   useEffect(() => {
     loadNormatives();
@@ -30,6 +38,104 @@ export default function NormativePage() {
     }
   };
 
+  // Функции для фильтрации
+  const filteredNormatives = useMemo(() => {
+    if (!data?.normatives) return [];
+
+    return data.normatives.filter(normative => {
+      // Фильтр по дисциплине (точное совпадение по ID)
+      if (filters.discipline && normative.discipline_id !== parseInt(filters.discipline)) {
+        return false;
+      }
+
+      // Фильтр по разряду
+      if (filters.rank && normative.rank_short !== filters.rank) {
+        return false;
+      }
+
+      // Фильтр по параметрам - проверяем каждый активный фильтр
+      const activeParameterFilters = Object.entries(filters.parameterFilters).filter(
+        ([_, value]) => value !== ''
+      );
+
+      for (const [paramType, paramValue] of activeParameterFilters) {
+        if (normative.discipline_parameters[paramType] !== paramValue) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [data, filters]);
+
+  // Получаем уникальные значения для селектов фильтров
+  const filterOptions = useMemo(() => {
+    if (!data?.normatives) return {
+      disciplines: [],
+      ranks: [],
+      parameterTypes: []
+    };
+
+    // Дисциплины с ID для точной фильтрации
+    const disciplines = [];
+    const disciplineMap = new Map();
+
+    data.normatives.forEach(normative => {
+      if (!disciplineMap.has(normative.discipline_id)) {
+        disciplineMap.set(normative.discipline_id, {
+          id: normative.discipline_id,
+          name: normative.discipline_name,
+          code: normative.discipline_code
+        });
+      }
+    });
+
+    disciplines.push(...disciplineMap.values());
+
+    const ranks = [...new Set(data.normatives.map(n => n.rank_short))];
+
+    // Собираем типы параметров и их возможные значения
+    const parameterTypesMap = new Map();
+
+    data.normatives.forEach(normative => {
+      Object.entries(normative.discipline_parameters).forEach(([type, value]) => {
+        if (!parameterTypesMap.has(type)) {
+          parameterTypesMap.set(type, new Set());
+        }
+        if (value && value.trim() !== '') {
+          parameterTypesMap.get(type).add(value);
+        }
+      });
+    });
+
+    // Преобразуем в массив для удобства
+    const parameterTypes = Array.from(parameterTypesMap.entries()).map(([type, values]) => ({
+      type,
+      values: [...values].sort()
+    }));
+
+    return {
+      disciplines: disciplines.sort((a, b) => a.name.localeCompare(b.name)),
+      ranks,
+      parameterTypes
+    };
+  }, [data]);
+
+  // Инициализируем фильтры параметров при загрузке данных
+  useEffect(() => {
+    if (filterOptions.parameterTypes.length > 0) {
+      const initialParameterFilters = {};
+      filterOptions.parameterTypes.forEach(({ type }) => {
+        initialParameterFilters[type] = '';
+      });
+
+      setFilters(prev => ({
+        ...prev,
+        parameterFilters: initialParameterFilters
+      }));
+    }
+  }, [filterOptions.parameterTypes]);
+
   const toggleDiscipline = (disciplineKey) => {
     setExpandedDisciplines(prev => ({
       ...prev,
@@ -37,25 +143,56 @@ export default function NormativePage() {
     }));
   };
 
-  // Группируем нормативы по дисциплинам И параметрам
-  const groupedByDisciplineAndParams = data?.normatives.reduce((acc, normative) => {
-    // Создаем уникальный ключ: дисциплина + параметры
-    const key = `${normative.discipline_id}_${normative.discipline_parameters}`;
+  // Обработчик для фильтров параметров
+  const handleParameterFilterChange = (paramType, value) => {
+    setFilters(prev => ({
+      ...prev,
+      parameterFilters: {
+        ...prev.parameterFilters,
+        [paramType]: value
+      }
+    }));
+  };
 
-    if (!acc[key]) {
-      acc[key] = {
-        discipline_name: normative.discipline_name,
-        discipline_code: normative.discipline_code,
-        discipline_parameters: normative.discipline_parameters,
-        discipline_id: normative.discipline_id,
-        normatives: []
-      };
-    }
-    acc[key].normatives.push(normative);
-    return acc;
-  }, {}) || {};
+  // Сброс всех фильтров параметров
+  const resetAllParameterFilters = () => {
+    const resetParameterFilters = {};
+    Object.keys(filters.parameterFilters).forEach(type => {
+      resetParameterFilters[type] = '';
+    });
 
-  // Порядок разрядов от высшего к низшему
+    setFilters(prev => ({
+      ...prev,
+      parameterFilters: resetParameterFilters
+    }));
+  };
+
+  // Проверяем, есть ли активные фильтры параметров
+  const hasActiveParameterFilters = useMemo(() => {
+    return Object.values(filters.parameterFilters).some(value => value !== '');
+  }, [filters.parameterFilters]);
+
+  // Группируем отфильтрованные нормативы
+  const groupedByDisciplineAndParams = useMemo(() => {
+    return filteredNormatives.reduce((acc, normative) => {
+      const paramsString = JSON.stringify(normative.discipline_parameters);
+      const key = `${normative.discipline_id}_${paramsString}`;
+
+      if (!acc[key]) {
+        acc[key] = {
+          discipline_name: normative.discipline_name,
+          discipline_code: normative.discipline_code,
+          discipline_parameters: normative.discipline_parameters,
+          discipline_id: normative.discipline_id,
+          normatives: []
+        };
+      }
+      acc[key].normatives.push(normative);
+      return acc;
+    }, {});
+  }, [filteredNormatives]);
+
+  // Остальной код (ранк-ордер, цвета и т.д.) остается таким же...
   const rankOrder = ['МСМК', 'МС', 'КМС', 'I', 'II', 'III', 'I юн.', 'II юн.', 'III юн.'];
 
   const getRankColor = (rank) => {
@@ -73,46 +210,110 @@ export default function NormativePage() {
     return colors[rank] || 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600';
   };
 
-  // Группируем по дисциплинам для статистики (без учета параметров)
-  const disciplinesCount = new Set(data?.normatives?.map(n => n.discipline_id) || []).size;
+  // Компонент фильтров
+  const FiltersSection = () => (
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-6 border border-gray-200 dark:border-gray-700">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Фильтры</h3>
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
-        <div className="container-responsive">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 border border-gray-200 dark:border-gray-700">
-            <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400 mb-4"></div>
-              <p className="text-gray-600 dark:text-gray-400">Загрузка нормативов...</p>
-            </div>
+      <div className="space-y-6">
+        {/* Основные фильтры */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Фильтр по дисциплине */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Дисциплина
+            </label>
+            <select
+              value={filters.discipline}
+              onChange={(e) => setFilters(prev => ({ ...prev, discipline: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Все дисциплины</option>
+              {filterOptions.disciplines.map(discipline => (
+                <option key={discipline.id} value={discipline.id}>
+                  {discipline.name} {discipline.code && `(${discipline.code})`}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Фильтр по разряду */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Разряд
+            </label>
+            <select
+              value={filters.rank}
+              onChange={(e) => setFilters(prev => ({ ...prev, rank: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Все разряды</option>
+              {filterOptions.ranks.map(rank => (
+                <option key={rank} value={rank}>{rank}</option>
+              ))}
+            </select>
           </div>
         </div>
-      </div>
-    );
-  }
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
-        <div className="container-responsive">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-            <div className="text-center text-red-600 dark:text-red-400">
-              <svg className="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-              <p className="font-medium mb-4">{error}</p>
-              <button
-                onClick={loadNormatives}
-                className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-              >
-                Повторить попытку
-              </button>
+        {/* Фильтры по параметрам */}
+        {filterOptions.parameterTypes.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Фильтры по параметрам
+              </label>
+              {hasActiveParameterFilters && (
+                <button
+                  onClick={resetAllParameterFilters}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline"
+                >
+                  Сбросить все параметры
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filterOptions.parameterTypes.map(({ type, values }) => (
+                <div key={type} className="space-y-2">
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
+                    {type}
+                  </label>
+                  <select
+                    value={filters.parameterFilters[type] || ''}
+                    onChange={(e) => handleParameterFilterChange(type, e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">--</option>
+                    {values.map(value => (
+                      <option key={value} value={value}>{value}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+        )}
       </div>
-    );
-  }
+
+      {/* Кнопка сброса всех фильтров */}
+      {(filters.discipline || filters.rank || hasActiveParameterFilters) && (
+        <div className="mt-4 flex justify-end border-t border-gray-200 dark:border-gray-600 pt-4">
+          <button
+            onClick={() => setFilters({
+              discipline: '',
+              rank: '',
+              parameterFilters: Object.fromEntries(
+                Object.keys(filters.parameterFilters).map(type => [type, ''])
+              )
+            })}
+            className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline"
+          >
+            Сбросить все фильтры
+          </button>
+        </div>
+      )}
+    </div>
+  );
 
   if (!data?.normatives?.length) {
     return (
@@ -151,30 +352,34 @@ export default function NormativePage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-                {data.sport_name}
+                {data?.sport_name}
               </h1>
               <p className="text-gray-600 dark:text-gray-400 mt-1">Спортивные нормативы и требования</p>
             </div>
             <div className="bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-4 py-2 rounded-lg text-sm border border-blue-200 dark:border-blue-800">
-              ID: {data.sport_id}
+              ID: {data?.sport_id}
             </div>
           </div>
         </div>
 
-        {/* Статистика */}
+        {/* Статистика - обновляем с учетом фильтров */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-6 border border-gray-200 dark:border-gray-700">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div>
-              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{disciplinesCount}</div>
+              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                {new Set(filteredNormatives.map(n => n.discipline_id)).size}
+              </div>
               <div className="text-sm text-gray-600 dark:text-gray-400">Дисциплин</div>
             </div>
             <div>
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400">{data.total_count}</div>
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                {filteredNormatives.length}
+              </div>
               <div className="text-sm text-gray-600 dark:text-gray-400">Нормативов</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                {new Set(data.normatives.map(n => n.rank_short)).size}
+                {new Set(filteredNormatives.map(n => n.rank_short)).size}
               </div>
               <div className="text-sm text-gray-600 dark:text-gray-400">Разрядов</div>
             </div>
@@ -186,6 +391,9 @@ export default function NormativePage() {
             </div>
           </div>
         </div>
+
+        {/* Секция фильтров */}
+        <FiltersSection />
 
         {/* Список нормативов по дисциплинам и параметрам */}
         <div className="space-y-4">
@@ -216,14 +424,22 @@ export default function NormativePage() {
                             </span>
                           )}
                         </div>
-                        {disciplineData.discipline_parameters && (
+
+                        {/* Отображение параметров как объекта */}
+                        {disciplineData.discipline_parameters && Object.keys(disciplineData.discipline_parameters).length > 0 && (
                           <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2 mb-2">
-                            <p className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-1">Параметры:</p>
-                            <p className="text-sm text-blue-700 dark:text-blue-400">
-                              {disciplineData.discipline_parameters}
-                            </p>
+                            <div className="space-y-1">
+                              {Object.entries(disciplineData.discipline_parameters).map(([paramType, paramValue]) => (
+                                <div key={paramType} className="flex items-start text-sm">
+                                  <span className="text-blue-700 dark:text-blue-400 font-medium min-w-[80px] flex-shrink-0">
+                                    {paramType}: {paramValue}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
+
                         <p className="text-xs text-gray-500 dark:text-gray-400">
                           {disciplineData.normatives.length} нормативов • {sortedNormatives[0]?.rank_short} - {sortedNormatives[sortedNormatives.length - 1]?.rank_short}
                         </p>
