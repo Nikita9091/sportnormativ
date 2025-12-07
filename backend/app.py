@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, Form
+from fastapi import FastAPI, HTTPException, Request, Form, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -104,6 +104,7 @@ class LinkDeletePayload(BaseModel):
     discipline_id: int
     parameter_id: int
 
+
 # === GET - запросы ===
 
 @app.get("/sports/json")
@@ -117,13 +118,44 @@ def get_sports_json():
 
 
 @app.get("/disciplines/json")
-def list_disciplines_json():
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT id, sport_id, discipline_name FROM ref_disciplines ORDER BY discipline_name")
-    rows = [row_to_dict(r) for r in cur.fetchall()]
+def list_disciplines_json(sport_id: Optional[int] = Query(None, description="Фильтр по виду спорта")):
+  conn = get_conn()
+  cur = conn.cursor()
+
+  try:
+    if sport_id is not None:
+      cur.execute(
+        "SELECT id, sport_id, discipline_name, discipline_code FROM ref_disciplines WHERE sport_id = %s ORDER BY discipline_name",
+        (sport_id,)
+      )
+    else:
+      cur.execute(
+        "SELECT id, sport_id, discipline_name, discipline_code FROM ref_disciplines ORDER BY discipline_name"
+      )
+
+    rows = cur.fetchall()
+
+    if not rows:
+      return []
+
+    # Преобразуем в список словарей
+    disciplines = []
+    for row in rows:
+      disciplines.append({
+        "id": row["id"],
+        "sport_id": row["sport_id"],
+        "discipline_name": row["discipline_name"],
+        "discipline_code": row["discipline_code"]
+      })
+
+    return disciplines
+
+  except Exception as e:
+    print(f"Error fetching disciplines: {e}")
+    return {"error": str(e)}
+
+  finally:
     conn.close()
-    return {"disciplines": rows}
 
 
 @app.get("/parameters/json")
@@ -222,7 +254,6 @@ def list_ranks_json():
     return {"ranks": rows}
 
 
-# ====== GET /sports/{id} - нормативы для вида спорта ======
 @app.get("/sports/{sport_id}", response_class=HTMLResponse)
 def get_normatives_for_sport_html(sport_id: int):
     conn = get_conn()
@@ -301,88 +332,195 @@ def get_normatives_for_sport_html(sport_id: int):
     return HTMLResponse(content=html_page, status_code=200)
 
 
+@app.get("/normative/{normative_id}/json")
+def get_normative_by_id_json(normative_id: int):
+  conn = get_conn()
+  cur = conn.cursor()
+
+  query = """
+    SELECT 
+        rs.id as sport_id,
+        rs.sport_name,
+        rd.id as discipline_id,
+        rd.discipline_name,
+        rd.discipline_code,
+        rr.id as rank_id,
+        rr.short_name as rank_short,
+        rr.full_name as rank_full,
+        rr.prestige,
+        rreq.requirement_value,
+        rreq.description as requirement_desc,
+        c.condition,
+        n.id as normative_id,
+        rpt.type_name as param_type,
+        rp.parameter_value as param_value
+    FROM normatives n
+    JOIN conditions c ON c.normative_id = n.id
+    JOIN ref_ranks rr ON rr.id = n.rank_id
+    JOIN ref_requirements rreq ON rreq.id = c.requirement_id
+    JOIN groups g ON g.normative_id = n.id
+    JOIN lnk_discipline_parameters ldp ON ldp.id = g.discipline_parameter_id
+    JOIN ref_disciplines rd ON rd.id = ldp.discipline_id
+    JOIN ref_parameters rp ON rp.id = ldp.parameter_id
+    JOIN ref_parameters_types rpt ON rpt.id = rp.parameter_type_id
+    JOIN ref_sports rs ON rs.id = rd.sport_id
+    WHERE n.id = %s
+    ORDER BY rpt.type_name, c.condition;
+    """
+
+  try:
+    cur.execute(query, (normative_id,))
+    rows = cur.fetchall()
+
+    if not rows:
+      return {
+        "error": "Норматив не найден",
+        "normative_id": normative_id,
+        "exists": False
+      }
+
+    # Группируем данные
+    result = {
+      "id": normative_id,
+      "sport_id": rows[0]["sport_id"],
+      "sport_name": rows[0]["sport_name"],
+      "discipline_id": rows[0]["discipline_id"],
+      "discipline_name": rows[0]["discipline_name"],
+      "discipline_code": rows[0]["discipline_code"],
+      "rank_short": rows[0]["rank_short"],
+      "rank_prestige": rows[0]["prestige"],
+      "discipline_parameters": {},
+      "conditions": {}
+    }
+
+    # Собираем параметры и условия
+    for row in rows:
+      # Добавляем параметры
+      if row["param_type"] and row["param_value"]:
+        result["discipline_parameters"][row["param_type"]] = row["param_value"]
+
+      # Добавляем условия
+      if row["requirement_value"] and row["condition"]:
+        result["conditions"][row["requirement_value"]] = row["condition"]
+
+    return result
+
+  except Exception as e:
+    print(f"Error fetching normative {normative_id}: {e}")
+    return {
+      "error": str(e),
+      "normative_id": normative_id,
+      "success": False
+    }
+
+  finally:
+    conn.close()
+
+
 @app.get("/sports/{sport_id}/normatives/json")
 def get_normatives_for_sport_json(sport_id: int):
-    conn = get_conn()
-    cur = conn.cursor()
+  conn = get_conn()
+  cur = conn.cursor()
 
-    query = """
+  query = """
     SELECT 
-        rs.sport_name AS sport_name,
-        rd.discipline_name AS discipline_name,
-        rd.discipline_code AS discipline_code,
-        rr.short_name AS rank_short,
-        rr.full_name AS rank_full,
-        rr.prestige AS rank_prestige,
-        rreq.requirement_value AS requirement_short,
-        rreq.description AS requirement_desc,
-        c.condition AS condition_value,
-        rr.id as rank_id,
+        rs.sport_name,
         rd.id as discipline_id,
+        rd.discipline_name,
+        rd.discipline_code,
+        rr.id as rank_id,
+        rr.short_name as rank_short,
+        rr.full_name as rank_full,
+        rr.prestige,
+        rreq.requirement_value,
+        rreq.description as requirement_desc,
+        c.condition,
         n.id as normative_id,
         rpt.type_name as param_type,
         rp.parameter_value as param_value
     FROM conditions c
-    JOIN normatives n ON c.normative_id = n.id
-    JOIN ref_ranks rr ON n.rank_id = rr.id
-    JOIN ref_requirements rreq ON c.requirement_id = rreq.id
-    JOIN groups g ON n.id = g.normative_id
-    JOIN lnk_discipline_parameters ldp ON g.discipline_parameter_id = ldp.id
-    JOIN ref_disciplines rd ON ldp.discipline_id = rd.id
-    JOIN ref_parameters rp ON ldp.parameter_id = rp.id
-    JOIN ref_parameters_types rpt ON rp.parameter_type_id = rpt.id
-    JOIN ref_sports rs ON rd.sport_id = rs.id
-    WHERE rs.id = %s
-    ORDER BY rd.discipline_name, rr.prestige DESC, rr.id, rpt.type_name
+    /* Оптимизация: начинаем с фильтрации по sport_id */
+    JOIN ref_disciplines rd ON rd.sport_id = %s
+    JOIN lnk_discipline_parameters ldp ON ldp.discipline_id = rd.id
+    JOIN ref_parameters rp ON rp.id = ldp.parameter_id
+    JOIN ref_parameters_types rpt ON rpt.id = rp.parameter_type_id
+    JOIN groups g ON g.discipline_parameter_id = ldp.id
+    JOIN normatives n ON n.id = g.normative_id
+    JOIN ref_ranks rr ON rr.id = n.rank_id
+    JOIN ref_requirements rreq ON rreq.id = c.requirement_id
+    JOIN ref_sports rs ON rs.id = rd.sport_id
+    WHERE c.normative_id = n.id
+    ORDER BY 
+        rd.discipline_name, 
+        rr.prestige DESC, 
+        rpt.type_name,  -- Сначала сортируем по типу параметра
+        c.condition;    -- Затем по условию
     """
 
-    cur.execute(query, (sport_id,))
-    rows = cur.fetchall()
-    conn.close()
+  cur.execute(query, (sport_id,))
+  rows = cur.fetchall()
+  conn.close()
 
-    if not rows:
-        return {
-            "sport_id": sport_id,
-            "sport_name": "Неизвестный вид спорта",
-            "normatives": [],
-            "total_count": 0
-        }
-
-    # Группируем параметры по normative_id
-    normatives_dict = {}
-
-    for row in rows:
-        normative_id = row["normative_id"]
-
-        if normative_id not in normatives_dict:
-            normatives_dict[normative_id] = {
-                "sport_name": row["sport_name"],
-                "discipline_name": row["discipline_name"],
-                "discipline_code": row["discipline_code"],
-                "discipline_parameters": {},
-                "rank_short": row["rank_short"],
-                "rank_full": row["rank_full"],
-                "rank_prestige": row["rank_prestige"],
-                "requirement_short": row["requirement_short"],
-                "requirement_desc": row["requirement_desc"],
-                "condition_value": row["condition_value"],
-                "rank_id": row["rank_id"],
-                "discipline_id": row["discipline_id"],
-            }
-
-        # Добавляем параметры
-        if row["param_type"] and row["param_value"]:
-            normatives_dict[normative_id]["discipline_parameters"][row["param_type"]] = row["param_value"]
-
-    normatives_data = list(normatives_dict.values())
-
+  if not rows:
     return {
-        "sport_id": sport_id,
-        "sport_name": rows[0]["sport_name"],
-        "normatives": normatives_data,
-        "total_count": len(normatives_data)
+      "sport_id": sport_id,
+      "sport_name": "Неизвестный вид спорта",
+      "normatives": [],
+      "total_count": 0
     }
 
+  normatives_dict = {}
+
+  for row in rows:
+    normative_id = row["normative_id"]
+
+    if normative_id not in normatives_dict:
+      normatives_dict[normative_id] = {
+        "id": normative_id,
+        "discipline_id": row["discipline_id"],
+        "discipline_name": row["discipline_name"],
+        "discipline_code": row["discipline_code"],
+        "discipline_parameters": {},
+        "rank_short": row["rank_short"],
+        "rank_full": row["rank_full"],
+        "rank_prestige": row["prestige"],
+        "condition": {},
+      }
+
+    normative = normatives_dict[normative_id]
+
+    # Добавляем параметры
+    if row["param_type"] and row["param_value"]:
+      normatives_dict[normative_id]["discipline_parameters"][row["param_type"]] = row["param_value"]
+
+    # Добавляем условия
+    if row["requirement_value"] and row["condition"]:
+      normatives_dict[normative_id]["condition"][row["requirement_value"]] = row["condition"]
+
+  # 5. Оптимизация: преобразуем сразу в список
+  normatives_data = [
+    {
+      "id": n["id"],
+      "discipline_id": n["discipline_id"],
+      "discipline_name": n["discipline_name"],
+      "discipline_code": n["discipline_code"],
+      "discipline_parameters": n["discipline_parameters"],
+      "rank_short": n["rank_short"],
+      "rank_prestige": n["rank_prestige"],
+      "condition": n["condition"],
+    }
+    for n in normatives_dict.values()
+  ]
+
+  return {
+    "sport_id": sport_id,
+    "sport_name": rows[0]["sport_name"],
+    "normatives": normatives_data,
+    "total_count": len(normatives_data)
+  }
+
+
+# === POST - запросы ===
 
 @app.post("/disciplines")
 def add_disciplines(payload: DisciplinesIn):
@@ -455,7 +593,6 @@ def add_disciplines(payload: DisciplinesIn):
     return {"inserted": inserted, "errors": errors}
 
 
-# ====== POST /parameter-types - добавить тип параметра ======
 @app.post("/parameter-types")
 def add_parameter_type(payload: ParameterTypeIn):
     conn = get_conn()
@@ -477,7 +614,6 @@ def add_parameter_type(payload: ParameterTypeIn):
     return {"id": nid, "type_name": payload.short_name}
 
 
-# ====== POST /parameters - добавить значение параметра ======
 @app.post("/parameters")
 def add_parameter(payload: ParameterIn):
     conn = get_conn()
@@ -506,7 +642,6 @@ def add_parameter(payload: ParameterIn):
     return {"id": pid, "parameter_value": payload.parameter_value, "parameter_type_id": payload.parameter_type_id}
 
 
-# ====== POST /requirements - добавить значение требования ======
 @app.post("/requirements")
 def add_requirement(payload: RequirementIn):
     conn = get_conn()
@@ -535,7 +670,6 @@ def add_requirement(payload: RequirementIn):
     return {"id": pid, "parameter_value": payload.requirement_value, "parameter_type_id": payload.requirement_type_id}
 
 
-# ====== POST /link-parameters - привязать параметры к дисциплине ======
 @app.post("/link-parameters")
 def link_parameters(payload: LinkParametersIn):
     conn = get_conn()
@@ -576,7 +710,6 @@ def link_parameters(payload: LinkParametersIn):
     return {"inserted": inserted, "errors": errors}
 
 
-# --- Твой эндпоинт POST /normatives (почти без изменений) ---
 @app.post("/normatives")
 def add_normatives(payload: CreateNormativeIn):
     conn = get_conn()
@@ -690,6 +823,98 @@ def add_normatives(payload: CreateNormativeIn):
 
 
 # ====== DELETE endpoints ======
+
+
+@app.delete("/normative/{normative_id}")
+def delete_normative(normative_id: int):
+  conn = get_conn()
+  cur = conn.cursor()
+
+  try:
+    # 1. Проверяем существование норматива
+    cur.execute("SELECT id FROM normatives WHERE id = %s", (normative_id,))
+    if not cur.fetchone():
+      return {
+        "success": False,
+        "error": f"Норматив с ID {normative_id} не найден",
+        "normative_id": normative_id
+      }
+
+    # 2. Получаем информацию для лога/ответа
+    cur.execute("""
+            SELECT 
+                n.id,
+                rd.discipline_name,
+                rr.short_name as rank_short
+            FROM normatives n
+            JOIN groups g ON g.normative_id = n.id
+            JOIN lnk_discipline_parameters ldp ON ldp.id = g.discipline_parameter_id
+            JOIN ref_disciplines rd ON rd.id = ldp.discipline_id
+            JOIN ref_ranks rr ON rr.id = n.rank_id
+            WHERE n.id = %s
+            LIMIT 1
+        """, (normative_id,))
+
+    normative_info = cur.fetchone()
+    discipline_name = normative_info["discipline_name"] if normative_info else "Неизвестно"
+    rank_short = normative_info["rank_short"] if normative_info else "Неизвестно"
+
+    # 3. Удаляем в правильном порядке (избегаем нарушений внешних ключей)
+    # Порядок удаления: conditions → groups → normatives
+
+    # Удаляем условия
+    cur.execute("DELETE FROM conditions WHERE normative_id = %s", (normative_id,))
+    conditions_deleted = cur.rowcount
+
+    # Удаляем связи групп
+    cur.execute("DELETE FROM groups WHERE normative_id = %s", (normative_id,))
+    groups_deleted = cur.rowcount
+
+    # Удаляем сам норматив
+    cur.execute("DELETE FROM normatives WHERE id = %s", (normative_id,))
+    normative_deleted = cur.rowcount
+
+    # Коммитим изменения
+    conn.commit()
+
+    return {
+      "success": True,
+      "message": f"Норматив успешно удален",
+      "normative_id": normative_id,
+      "details": {
+        "discipline": discipline_name,
+        "rank": rank_short,
+        "conditions_deleted": conditions_deleted,
+        "groups_deleted": groups_deleted,
+        "normative_deleted": normative_deleted
+      }
+    }
+
+  except Exception as e:
+    # Откатываем транзакцию при ошибке
+    conn.rollback()
+    print(f"Error deleting normative {normative_id}: {e}")
+
+    # Проверяем, является ли ошибка нарушением внешнего ключа
+    error_msg = str(e)
+    if "foreign key constraint" in error_msg.lower():
+      return {
+        "success": False,
+        "error": f"Невозможно удалить норматив. Существуют зависимые записи.",
+        "normative_id": normative_id,
+        "details": "Проверьте связанные данные в других таблицах"
+      }
+
+    return {
+      "success": False,
+      "error": f"Ошибка при удалении: {error_msg}",
+      "normative_id": normative_id
+    }
+
+  finally:
+    conn.close()
+
+
 @app.delete("/disciplines/{id}")
 def delete_discipline(id: int):
     conn = get_conn()
