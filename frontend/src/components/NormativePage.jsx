@@ -11,6 +11,7 @@ export default function NormativePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedDisciplines, setExpandedDisciplines] = useState({});
+  const [deletingId, setDeletingId] = useState(null);
 
   // Состояния фильтров - теперь для каждого типа параметра свой фильтр
   const [filters, setFilters] = useState({
@@ -38,6 +39,35 @@ export default function NormativePage() {
     }
   };
 
+  // Функция удаления норматива
+  const handleDeleteNormative = async (normativeId) => {
+    if (!window.confirm('Вы уверены, что хотите удалить этот норматив?')) {
+      return;
+    }
+
+    setDeletingId(normativeId);
+    try {
+      const response = await axios.delete(`${API}/normative/${normativeId}`);
+
+      if (response.data.success) {
+        // Удаляем норматив из локального состояния
+        setData(prev => ({
+          ...prev,
+          normatives: prev.normatives.filter(n => n.id !== normativeId),
+          total_count: prev.total_count - 1
+        }));
+        alert('Норматив успешно удален');
+      } else {
+        alert(`Ошибка при удалении: ${response.data.error}`);
+      }
+    } catch (err) {
+      console.error("Ошибка при удалении норматива:", err);
+      alert('Не удалось удалить норматив');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   // Функции для фильтрации
   const filteredNormatives = useMemo(() => {
     if (!data?.normatives) return [];
@@ -59,7 +89,7 @@ export default function NormativePage() {
       );
 
       for (const [paramType, paramValue] of activeParameterFilters) {
-        if (normative.discipline_parameters[paramType] !== paramValue) {
+        if ((normative.discipline_parameters?.[paramType] ?? '') !== paramValue) {
           return false;
         }
       }
@@ -92,18 +122,18 @@ export default function NormativePage() {
 
     disciplines.push(...disciplineMap.values());
 
-    const ranks = [...new Set(data.normatives.map(n => n.rank_short))];
+    const ranks = [...new Set(data.normatives.map(n => n.rank_short).filter(Boolean))];
 
     // Собираем типы параметров и их возможные значения
     const parameterTypesMap = new Map();
 
     data.normatives.forEach(normative => {
-      Object.entries(normative.discipline_parameters).forEach(([type, value]) => {
+      Object.entries(normative.discipline_parameters || {}).forEach(([type, value]) => {
         if (!parameterTypesMap.has(type)) {
           parameterTypesMap.set(type, new Set());
         }
-        if (value && value.trim() !== '') {
-          parameterTypesMap.get(type).add(value);
+        if (value && String(value).trim() !== '') {
+          parameterTypesMap.get(type).add(String(value));
         }
       });
     });
@@ -115,7 +145,7 @@ export default function NormativePage() {
     }));
 
     return {
-      disciplines: disciplines.sort((a, b) => a.name.localeCompare(b.name)),
+      disciplines: disciplines.sort((a, b) => (a.name || '').localeCompare(b.name || '')),
       ranks,
       parameterTypes
     };
@@ -134,7 +164,8 @@ export default function NormativePage() {
         parameterFilters: initialParameterFilters
       }));
     }
-  }, [filterOptions.parameterTypes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterOptions.parameterTypes.length]);
 
   const toggleDiscipline = (disciplineKey) => {
     setExpandedDisciplines(prev => ({
@@ -175,14 +206,14 @@ export default function NormativePage() {
   // Группируем отфильтрованные нормативы
   const groupedByDisciplineAndParams = useMemo(() => {
     return filteredNormatives.reduce((acc, normative) => {
-      const paramsString = JSON.stringify(normative.discipline_parameters);
+      const paramsString = JSON.stringify(normative.discipline_parameters || {});
       const key = `${normative.discipline_id}_${paramsString}`;
 
       if (!acc[key]) {
         acc[key] = {
           discipline_name: normative.discipline_name,
           discipline_code: normative.discipline_code,
-          discipline_parameters: normative.discipline_parameters,
+          discipline_parameters: normative.discipline_parameters || {},
           discipline_id: normative.discipline_id,
           normatives: []
         };
@@ -314,6 +345,30 @@ export default function NormativePage() {
       )}
     </div>
   );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
+        <div className="container-responsive">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 border border-gray-200 dark:border-gray-700 text-center">
+            Загрузка...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
+        <div className="container-responsive">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 border border-gray-200 dark:border-gray-700 text-center text-red-500">
+            {error}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!data?.normatives?.length) {
     return (
@@ -463,38 +518,58 @@ export default function NormativePage() {
                   <div className="border-t border-gray-200 dark:border-gray-700">
                     <div className="p-6">
                       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                        {sortedNormatives.map((normative, index) => (
-                          <div
-                            key={index}
-                            className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 hover:border-blue-300 dark:hover:border-blue-500 transition-colors bg-white dark:bg-gray-800"
-                          >
-                            <div className="flex justify-between items-start mb-3">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getRankColor(normative.rank_short)}`}>
-                                {normative.rank_short}
-                              </span>
-                              <span className="text-lg font-bold text-gray-900 dark:text-white">
-                                {normative.condition_value}
-                              </span>
-                            </div>
+                        {sortedNormatives.map((normative, index) => {
+                          const conditionEntries = Object.entries(normative.condition || {});
+                          const firstCond = conditionEntries[0];
+                          const mainRequirement = firstCond ? firstCond[0] : null;
+                          const mainConditionValue = firstCond ? firstCond[1] : null;
 
-                            <div className="space-y-2 text-sm">
-                              <div>
-                                <span className="text-gray-600 dark:text-gray-400">Требование:</span>
-                                <span className="ml-1 font-medium text-gray-900 dark:text-white">
-                                  {normative.requirement_short}
+                          return (
+                            <div
+                              key={index}
+                              className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 hover:border-blue-300 dark:hover:border-blue-500 transition-colors bg-white dark:bg-gray-800 relative"
+                            >
+                                {/* Простой вариант с символом */}
+                                <button
+                                  onClick={() => handleDeleteNormative(normative.id)}
+                                  disabled={deletingId === normative.id}
+                                  className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Удалить норматив"
+                                >
+                                  {deletingId === normative.id ? (
+                                    <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
+                                  ) : (
+                                    <span className="text-lg font-bold">✕</span>
+                                  )}
+                                </button>
+
+                              {/* ID норматива */}
+                              <div className="absolute top-2 left-2">
+                                <span className="text-xs text-gray-500 dark:text-gray-400 font-mono bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+                                  ID: {normative.id}
                                 </span>
                               </div>
-                              {normative.requirement_desc && (
+
+                              <div className="mt-6 flex justify-between items-start mb-3">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getRankColor(normative.rank_short)}`}>
+                                  {normative.rank_short}
+                                </span>
+                                <span className="text-lg font-bold text-gray-900 dark:text-white">
+                                  {mainConditionValue ?? '—'}
+                                </span>
+                              </div>
+
+                              <div className="space-y-2 text-sm">
                                 <div>
-                                  <span className="text-gray-600 dark:text-gray-400">Описание:</span>
-                                  <span className="ml-1 text-gray-700 dark:text-gray-300">
-                                    {normative.requirement_desc}
+                                  <span className="text-gray-600 dark:text-gray-400">Требование:</span>
+                                  <span className="ml-1 font-medium text-gray-900 dark:text-white">
+                                    {mainRequirement ?? normative.requirement_short ?? '—'}
                                   </span>
                                 </div>
-                              )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
