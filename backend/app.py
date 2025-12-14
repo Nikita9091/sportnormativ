@@ -132,23 +132,10 @@ def list_disciplines_json(sport_id: Optional[int] = Query(None, description="Ф�
       cur.execute(
         "SELECT id, sport_id, discipline_name, discipline_code FROM ref_disciplines ORDER BY discipline_name"
       )
+    rows = [row_to_dict(r) for r in cur.fetchall()]
+    conn.close()
+    return { "sport_id": sport_id, "disciplines": rows, "total_count": len(rows) }
 
-    rows = cur.fetchall()
-
-    if not rows:
-      return []
-
-    # Преобразуем в список словарей
-    disciplines = []
-    for row in rows:
-      disciplines.append({
-        "id": row["id"],
-        "sport_id": row["sport_id"],
-        "discipline_name": row["discipline_name"],
-        "discipline_code": row["discipline_code"]
-      })
-
-    return disciplines
 
   except Exception as e:
     print(f"Error fetching disciplines: {e}")
@@ -730,8 +717,10 @@ def add_normatives(payload: CreateNormativeIn):
             raise HTTPException(status_code=400, detail=f"lnk_discipline_parameters id {ldp_id} not found")
         if row["discipline_id"] != payload.discipline_id:
             conn.close()
-            raise HTTPException(status_code=400,
-                                detail=f"ldp_id {ldp_id} does not belong to discipline_id {payload.discipline_id}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"ldp_id {ldp_id} does not belong to discipline_id {payload.discipline_id}"
+            )
 
     # --- Проверка requirement ---
     cur.execute("SELECT id FROM ref_requirements WHERE id = %s", (payload.requirement_id,))
@@ -739,87 +728,141 @@ def add_normatives(payload: CreateNormativeIn):
         conn.close()
         raise HTTPException(status_code=400, detail=f"requirement_id {payload.requirement_id} not found")
 
-    # --- НОВАЯ ПРОВЕРКА: Уникальность комбинации ---
-    # Сортируем ldp_ids для consistent сравнения
+    # Нормализуем ldp_ids для сравнения (сортируем)
     sorted_ldp_ids = sorted(payload.ldp_ids)
-
-    # Проверяем существующие нормативы с такой же комбинацией
-    for entry in payload.rank_entries:
-        if not entry.condition_value:
-            continue
-
-        cur.execute("""
-            SELECT n.id 
-            FROM normatives n
-            JOIN conditions c ON c.normative_id = n.id
-            JOIN groups g ON g.normative_id = n.id
-            WHERE n.rank_id = %s
-            AND c.requirement_id = %s
-            AND g.discipline_parameter_id = ANY(%s)
-            GROUP BY n.id
-            HAVING COUNT(DISTINCT g.discipline_parameter_id) = %s 
-                AND array_agg(DISTINCT g.discipline_parameter_id ORDER BY g.discipline_parameter_id) = %s
-        """, (
-            entry.rank_id,
-            payload.requirement_id,
-            sorted_ldp_ids,
-            len(sorted_ldp_ids),
-            sorted_ldp_ids
-        ))
-
-        existing_normative = cur.fetchone()
-        if existing_normative:
-            conn.close()
-            raise HTTPException(
-                status_code=400,
-                detail=f"Норматив для разряда {entry.rank_id} с параметрами {sorted_ldp_ids} уже существует (id: {existing_normative['id']})"
-            )
+    ldp_count = len(sorted_ldp_ids)
 
     created = []
-    errors = []
+    used_existing = []   # если нашли существующий норматив и добавили требование в него
+    skipped = []         # если обнаружили, что требование (requirement+value) уже есть -> ошибка для этой записи
 
     try:
+        # Начинаем транзакцию (если ваш get_conn возвращает автокоммит off — ок)
         for entry in payload.rank_entries:
+            # Пропускаем пустые значения условия (как в оригинале)
             if not entry.condition_value:
                 continue
 
-            # 1. Создаем норматив
+            # 1) Проверяем, есть ли норматив с такой же комбинацией rank_id + набором discipline_parameter_id
+            # Ищем нормативы, у которых собран exactly тот же набор discipline_parameter_id (включая порядок по id)
+            cur.execute("""
+                SELECT n.id
+                FROM normatives n
+                JOIN groups g ON g.normative_id = n.id
+                WHERE n.rank_id = %s
+                GROUP BY n.id
+                HAVING COUNT(DISTINCT g.discipline_parameter_id) = %s
+                   AND array_agg(DISTINCT g.discipline_parameter_id ORDER BY g.discipline_parameter_id) = %s
+                LIMIT 1
+            """, (
+                entry.rank_id,
+                ldp_count,
+                sorted_ldp_ids
+            ))
+
+            existing = cur.fetchone()
+            if existing:
+                # нашли норматив с нужной комбинацией (переходим к пункту 2)
+                normative_id = existing["id"]
+
+                # 2) Проверяем — есть ли уже условие с таким requirement_id + condition для этого нормативa
+                cur.execute("""
+                    SELECT id FROM conditions
+                    WHERE normative_id = %s
+                      AND requirement_id = %s
+                      AND condition = %s
+                    LIMIT 1
+                """, (normative_id, payload.requirement_id, entry.condition_value))
+
+                cond_exists = cur.fetchone()
+                if cond_exists:
+                    # Если такое требование уже есть — считаем это ошибкой (сообщаем и не создаём новый)
+                    # Сбрасывать транзакцию не будем — просто добавим в skipped список и продолжим обработку следующих entry
+                    skipped.append({
+                        "rank_id": entry.rank_id,
+                        "normative_id": normative_id,
+                        "reason": "condition already exists"
+                    })
+                    continue
+                else:
+                    # Условие новое для найденного норматива — добавляем его (пункт 3)
+                    cur.execute("""
+                        INSERT INTO conditions (normative_id, requirement_id, condition)
+                        VALUES (%s, %s, %s)
+                        RETURNING id
+                    """, (normative_id, payload.requirement_id, entry.condition_value))
+                    condition_id = cur.fetchone()["id"]
+
+                    # Добавляем дополнительные требования, если есть
+                    if payload.additional_requirements:
+                        for req in payload.additional_requirements:
+                            cur.execute("""
+                                INSERT INTO add_requirements (condition_id, addition_type, addition)
+                                VALUES (%s, %s, %s)
+                            """, (condition_id, req.type, req.value))
+
+                    used_existing.append({
+                        "rank_id": entry.rank_id,
+                        "normative_id": normative_id,
+                        "condition_id": condition_id
+                    })
+                    # не создаём новый норматив, идём к следующему entry
+                    continue
+
+            # Если норматив не найден — создаём новый норматив и привязываем группы/условие/доп.требования
             cur.execute("INSERT INTO normatives (rank_id) VALUES (%s) RETURNING id", (entry.rank_id,))
             normative_id = cur.fetchone()["id"]
 
-            # 2. Связываем с параметрами
-            for ldp_id in payload.ldp_ids:
-                cur.execute("INSERT INTO groups (discipline_parameter_id, normative_id) VALUES (%s, %s)",
-                            (ldp_id, normative_id))
+            # Связываем с параметрами (groups)
+            for ldp_id in sorted_ldp_ids:
+                cur.execute(
+                    "INSERT INTO groups (discipline_parameter_id, normative_id) VALUES (%s, %s)",
+                    (ldp_id, normative_id)
+                )
 
-            # 3. Добавляем условие
+            # Добавляем условие (requirement + condition_value)
             cur.execute("""
-                    INSERT INTO conditions (normative_id, requirement_id, condition)
-                    VALUES (%s, %s, %s)
-                    RETURNING id 
-                """, (normative_id, payload.requirement_id, entry.condition_value))
-
+                INSERT INTO conditions (normative_id, requirement_id, condition)
+                VALUES (%s, %s, %s)
+                RETURNING id
+            """, (normative_id, payload.requirement_id, entry.condition_value))
             condition_id = cur.fetchone()["id"]
 
-            # 4. Добавляем дополнительные требования
+            # Добавляем дополнительные требования
             if payload.additional_requirements:
                 for req in payload.additional_requirements:
                     cur.execute("""
-                            INSERT INTO add_requirements (condition_id, addition_type, addition)
-                            VALUES (%s, %s, %s)
-                        """, (condition_id, req.type, req.value))
+                        INSERT INTO add_requirements (condition_id, addition_type, addition)
+                        VALUES (%s, %s, %s)
+                    """, (condition_id, req.type, req.value))
 
-            created.append(normative_id)
+            created.append({
+                "rank_id": entry.rank_id,
+                "normative_id": normative_id,
+                "condition_id": condition_id
+            })
 
+        # Фиксируем транзакцию
         conn.commit()
     except Exception as e:
         conn.rollback()
         conn.close()
-        print(f"Error: {e}")
+        # логируем серверно; возвращаем 500
+        print(f"Error while adding normative(s): {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
     conn.close()
-    return {"created": created}
+
+    # Если есть пропущенные записи с конфликтом, можно вернуть их в ответе клиенту
+    result = {
+        "created": created,
+        "updated_existing": used_existing,
+        "skipped_conflicts": skipped
+    }
+
+    # Если вы хотите, чтобы конфликт (skipped) был явной ошибкой — можно вместо возврата результата выбросить HTTPException.
+    # Сейчас мы возвращаем подробный отчет о том, что произошло.
+    return result
 
 
 # ====== DELETE endpoints ======
