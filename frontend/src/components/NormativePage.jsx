@@ -518,18 +518,17 @@ export default function NormativePage() {
                   <div className="border-t border-gray-200 dark:border-gray-700">
                     <div className="p-6">
                       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                        {sortedNormatives.map((normative, index) => {
+                        {sortedNormatives.flatMap((normative, normativeIndex) => {
+                          // Преобразуем объект condition в массив условий
                           const conditionEntries = Object.entries(normative.condition || {});
-                          const firstCond = conditionEntries[0];
-                          const mainRequirement = firstCond ? firstCond[0] : null;
-                          const mainConditionValue = firstCond ? firstCond[1] : null;
 
-                          return (
-                            <div
-                              key={index}
-                              className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 hover:border-blue-300 dark:hover:border-blue-500 transition-colors bg-white dark:bg-gray-800 relative"
-                            >
-                                {/* Простой вариант с символом */}
+                          // Если нет условий, возвращаем одну карточку
+                          if (conditionEntries.length === 0) {
+                            return [
+                              <div
+                                key={`${normative.id}_default`}
+                                className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 hover:border-blue-300 dark:hover:border-blue-500 transition-colors bg-white dark:bg-gray-800 relative"
+                              >
                                 <button
                                   onClick={() => handleDeleteNormative(normative.id)}
                                   disabled={deletingId === normative.id}
@@ -543,6 +542,49 @@ export default function NormativePage() {
                                   )}
                                 </button>
 
+                                <div className="absolute top-2 left-2">
+                                  <span className="text-xs text-gray-500 dark:text-gray-400 font-mono bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+                                    ID: {normative.id}
+                                  </span>
+                                </div>
+
+                                <div className="mt-6 flex justify-between items-start mb-3">
+                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getRankColor(normative.rank_short)}`}>
+                                    {normative.rank_short}
+                                  </span>
+                                  <span className="text-lg font-bold text-gray-900 dark:text-white">
+                                    —
+                                  </span>
+                                </div>
+
+                                <div className="space-y-2 text-sm">
+                                  <div>
+                                    <span className="text-gray-600 dark:text-gray-400">Нет условий</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ];
+                          }
+
+                          // Создаем карточку для каждого условия
+                          return conditionEntries.map(([conditionKey, conditionValue], conditionIndex) => (
+                            <div
+                              key={`${normative.id}_${conditionKey}_${conditionIndex}`}
+                              className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 hover:border-blue-300 dark:hover:border-blue-500 transition-colors bg-white dark:bg-gray-800 relative"
+                            >
+                              <button
+                                onClick={() => handleDeleteNormative(normative.id)}
+                                disabled={deletingId === normative.id}
+                                className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Удалить норматив"
+                              >
+                                {deletingId === normative.id ? (
+                                  <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
+                                ) : (
+                                  <span className="text-lg font-bold">✕</span>
+                                )}
+                              </button>
+
                               {/* ID норматива */}
                               <div className="absolute top-2 left-2">
                                 <span className="text-xs text-gray-500 dark:text-gray-400 font-mono bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
@@ -555,20 +597,20 @@ export default function NormativePage() {
                                   {normative.rank_short}
                                 </span>
                                 <span className="text-lg font-bold text-gray-900 dark:text-white">
-                                  {mainConditionValue ?? '—'}
+                                  {conditionValue ?? '—'}
                                 </span>
                               </div>
 
                               <div className="space-y-2 text-sm">
                                 <div>
-                                  <span className="text-gray-600 dark:text-gray-400">Требование:</span>
+                                  <span className="text-gray-600 dark:text-gray-400">Условие:</span>
                                   <span className="ml-1 font-medium text-gray-900 dark:text-white">
-                                    {mainRequirement ?? normative.requirement_short ?? '—'}
+                                    {conditionKey ?? normative.requirement_short ?? '—'}
                                   </span>
                                 </div>
                               </div>
                             </div>
-                          );
+                          ));
                         })}
                       </div>
                     </div>
