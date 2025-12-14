@@ -470,22 +470,17 @@ export default function NormativePage() {
                       <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
                       <div className="flex-1">
                         <h3 className="font-semibold text-lg text-gray-900 dark:text-white mb-1">
-                          {disciplineData.discipline_name}
-                        </h3>
-                        <div className="flex flex-wrap gap-2 mb-2">
-                          {disciplineData.discipline_code && (
-                            <span className="inline-block bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded text-xs font-medium border border-gray-200 dark:border-gray-600">
+                          {disciplineData.discipline_name} <span className="inline-block bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded text-xs font-medium border border-gray-200 dark:border-gray-600">
                               {disciplineData.discipline_code}
                             </span>
-                          )}
-                        </div>
+                        </h3>
 
                         {/* Отображение параметров как объекта */}
                         {disciplineData.discipline_parameters && Object.keys(disciplineData.discipline_parameters).length > 0 && (
                           <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2 mb-2">
                             <div className="space-y-1">
                               {Object.entries(disciplineData.discipline_parameters).map(([paramType, paramValue]) => (
-                                <div key={paramType} className="flex items-start text-sm">
+                                <div key={paramType} className="flex items-start text-xs">
                                   <span className="text-blue-700 dark:text-blue-400 font-medium min-w-[80px] flex-shrink-0">
                                     {paramType}: {paramValue}
                                   </span>
