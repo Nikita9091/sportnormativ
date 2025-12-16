@@ -11,12 +11,12 @@ export default function ParameterManager({ onChange }) {
   const [newValue, setNewValue] = useState("");
 
   const loadParams = async () => {
-    const r = await axios.get(`${API}/parameters/json`);
+    const r = await axios.get(`${API}/parameters`);
     setParams(r.data.parameters || []);
   };
 
   const loadParamTypes = async () => {
-    const r = await axios.get(`${API}/parameter_types/json`);
+    const r = await axios.get(`${API}/parameter_types`);
     setParamTypes(r.data.parameter_types || []);
   };
 

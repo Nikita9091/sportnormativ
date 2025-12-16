@@ -51,11 +51,11 @@ function MainApp() {
   // загрузка всех справочников
   const reloadAll = async () => {
     const [disc, params, types, requires, require_types] = await Promise.all([
-      axios.get(`${API}/disciplines/json`),
-      axios.get(`${API}/parameters/json`),
-      axios.get(`${API}/parameter_types/json`),
-      axios.get(`${API}/requirements/json`),
-      axios.get(`${API}/requirement_types/json`)
+      axios.get(`${API}/disciplines`),
+      axios.get(`${API}/parameters`),
+      axios.get(`${API}/parameter_types`),
+      axios.get(`${API}/requirements`),
+      axios.get(`${API}/requirement_types`)
     ]);
     setDisciplines(disc.data.disciplines || []);
     setParameters(params.data.parameters || []);
@@ -63,7 +63,7 @@ function MainApp() {
   };
 
   useEffect(() => {
-    axios.get(`${API}/sports/json`).then(r => {
+    axios.get(`${API}/sports`).then(r => {
       setSports(r.data.sports);
 
       // Если есть сохраненный спорт, обновляем его данные из свежего списка

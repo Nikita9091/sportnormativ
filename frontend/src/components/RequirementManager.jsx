@@ -15,7 +15,7 @@ export default function RequirementManager({ onChange }) {
 
   const loadRequires = async () => {
     try {
-      const r = await axios.get(`${API}/requirements/json`);
+      const r = await axios.get(`${API}/requirements`);
       setRequires(r.data.requirements || []);
     } catch (error) {
       console.error("Ошибка при загрузке требований:", error);
@@ -24,7 +24,7 @@ export default function RequirementManager({ onChange }) {
 
   const loadRequireTypes = async () => {
     try {
-      const r = await axios.get(`${API}/requirement_types/json`);
+      const r = await axios.get(`${API}/requirement_types`);
       setRequireTypes(r.data.requirements_types || []);
     } catch (error) {
       console.error("Ошибка при загрузке типов:", error);

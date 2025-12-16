@@ -29,7 +29,7 @@ export default function NormativePage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get(`${API}/sports/${sport_id}/normatives/json`);
+      const response = await axios.get(`${API}/sports/${sport_id}/normatives`);
       setData(response.data);
     } catch (err) {
       console.error("Ошибка при загрузке нормативов:", err);

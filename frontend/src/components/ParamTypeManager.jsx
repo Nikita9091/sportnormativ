@@ -12,7 +12,7 @@ export default function ParamTypeManager({ onChange }) {
   const loadTypes = async () => {
     try {
       setLoading(true);
-      const r = await axios.get(`${API}/parameter_types/json`);
+      const r = await axios.get(`${API}/parameter_types`);
       setTypes(r.data.parameter_types || []);
     } catch (err) {
       console.error("Ошибка при загрузке типов параметров:", err);

@@ -32,13 +32,13 @@ export default function NormativeManager({
 
   const loadRequires = async () => {
     try {
-      const r = await axios.get(`${API}/requirements/json`);
+      const r = await axios.get(`${API}/requirements`);
       setRequires(r.data.requirements || []);
     } catch (e) { console.error(e); }
   };
   const loadRanks = async () => {
     try {
-      const r = await axios.get(`${API}/ranks/json`);
+      const r = await axios.get(`${API}/ranks`);
       setRanks(r.data.ranks || []);
     } catch (e) { console.error(e); }
   };

@@ -107,7 +107,7 @@ class LinkDeletePayload(BaseModel):
 
 # === GET - запросы ===
 
-@app.get("/sports/json")
+@app.get("/sports")
 def get_sports_json():
     conn = get_conn()
     cur = conn.cursor()
@@ -117,7 +117,7 @@ def get_sports_json():
     return {"sports": rows}
 
 
-@app.get("/disciplines/json")
+@app.get("/disciplines")
 def list_disciplines_json(sport_id: Optional[int] = Query(None, description="Фильтр по виду спорта")):
   conn = get_conn()
   cur = conn.cursor()
@@ -145,7 +145,7 @@ def list_disciplines_json(sport_id: Optional[int] = Query(None, description="Ф�
     conn.close()
 
 
-@app.get("/parameters/json")
+@app.get("/parameters")
 def list_parameters_json():
     conn = get_conn()
     cur = conn.cursor()
@@ -160,7 +160,7 @@ def list_parameters_json():
     return {"parameters": rows}
 
 
-@app.get("/parameter_types/json")
+@app.get("/parameter_types")
 def list_parameter_types_json():
     conn = get_conn()
     cur = conn.cursor()
@@ -170,7 +170,7 @@ def list_parameter_types_json():
     return {"parameter_types": rows}
 
 
-@app.get("/requirement_types/json")
+@app.get("/requirement_types")
 def list_requirement_types_json():
     conn = get_conn()
     cur = conn.cursor()
@@ -180,7 +180,7 @@ def list_requirement_types_json():
     return {"requirements_types": rows}
 
 
-@app.get("/requirements/json")
+@app.get("/requirements")
 def list_requirements_json():
     conn = get_conn()
     cur = conn.cursor()
@@ -195,7 +195,7 @@ def list_requirements_json():
     return {"requirements": rows}
 
 
-@app.get("/ldp/json")
+@app.get("/ldp")
 def list_ldp_json():
     conn = get_conn()
     cur = conn.cursor()
@@ -231,7 +231,7 @@ def list_ldp_(id: int):
     return {"lnk_discipline_parameters": rows}
 
 
-@app.get("/ranks/json")
+@app.get("/ranks")
 def list_ranks_json():
     conn = get_conn()
     cur = conn.cursor()
@@ -319,7 +319,7 @@ def get_normatives_for_sport_html(sport_id: int):
     return HTMLResponse(content=html_page, status_code=200)
 
 
-@app.get("/normative/{normative_id}/json")
+@app.get("/normative/{normative_id}")
 def get_normative_by_id_json(normative_id: int):
   conn = get_conn()
   cur = conn.cursor()
@@ -404,7 +404,7 @@ def get_normative_by_id_json(normative_id: int):
     conn.close()
 
 
-@app.get("/sports/{sport_id}/normatives/json")
+@app.get("/sports/{sport_id}/normatives")
 def get_normatives_for_sport_json(sport_id: int):
   conn = get_conn()
   cur = conn.cursor()
