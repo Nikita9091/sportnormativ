@@ -454,8 +454,8 @@ export default function NormativePage() {
         <div className="space-y-4">
           {Object.entries(groupedByDisciplineAndParams).map(([disciplineKey, disciplineData]) => {
             const isExpanded = expandedDisciplines[disciplineKey];
-            const sortedNormatives = disciplineData.normatives.sort((a, b) =>
-              rankOrder.indexOf(a.rank_short) - rankOrder.indexOf(b.rank_short)
+            const sortedNormatives = [...disciplineData.normatives].sort(
+                (a, b) => (a.rank_prestige ?? 0) - (b.rank_prestige ?? 0)
             );
 
             return (
