@@ -117,21 +117,85 @@ def get_sports_json():
     return {"sports": rows}
 
 
+@app.get("/v_1/sports")
+def get_sports_v1_json():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT 
+            s.id AS sport_id,
+            s.sport_name,
+            t.type_name,
+            d.id AS discipline_id,
+            d.discipline_name
+        FROM ref_sports s
+        LEFT JOIN ref_disciplines d ON s.id = d.sport_id
+        LEFT JOIN ref_sport_types t ON s.sport_type_id = t.id
+        ORDER BY s.id, d.discipline_name
+    """)
+
+    rows = cur.fetchall()
+    conn.close()
+
+    sports_map = {}
+
+    for row in rows:
+        sport_id = row["sport_id"]
+
+        if sport_id not in sports_map:
+            sports_map[sport_id] = {
+                "id": sport_id,
+                "sport_name": row["sport_name"],
+                "sport_type": row["type_name"],
+                "disciplines": []
+            }
+
+        # discipline может быть NULL из-за LEFT JOIN
+        if row["discipline_id"] is not None:
+            sports_map[sport_id]["disciplines"].append({
+                "discipline_id": row["discipline_id"],
+                "discipline_name": row["discipline_name"]
+            })
+
+    return {
+        "sports": list(sports_map.values())
+    }
+
+
 @app.get("/disciplines")
-def list_disciplines_json(sport_id: Optional[int] = Query(None, description="Фильтр по виду спорта")):
+def list_disciplines_json():
   conn = get_conn()
   cur = conn.cursor()
 
   try:
-    if sport_id is not None:
-      cur.execute(
-        "SELECT id, sport_id, discipline_name, discipline_code FROM ref_disciplines WHERE sport_id = %s ORDER BY discipline_name",
-        (sport_id,)
-      )
-    else:
-      cur.execute(
-        "SELECT id, sport_id, discipline_name, discipline_code FROM ref_disciplines ORDER BY discipline_name"
-      )
+    cur.execute(
+      "SELECT sport_id, id AS discipline_id, discipline_name, discipline_code FROM ref_disciplines ORDER BY discipline_name",
+    )
+    rows = [row_to_dict(r) for r in cur.fetchall()]
+    conn.close()
+    return { "disciplines": rows, "total_count": len(rows) }
+
+
+  except Exception as e:
+    print(f"Error fetching disciplines: {e}")
+    return {"error": str(e)}
+
+  finally:
+    conn.close()
+
+
+@app.get("/v_1/disciplines/{sport_id}")
+def list_disciplines_for_sport_v1_json(sport_id: int):
+  conn = get_conn()
+  cur = conn.cursor()
+
+  try:
+    cur.execute(
+      "SELECT id AS discipline_id, discipline_name, discipline_code FROM ref_disciplines WHERE sport_id = %s ORDER BY discipline_name",
+      (sport_id,)
+    )
+
     rows = [row_to_dict(r) for r in cur.fetchall()]
     conn.close()
     return { "sport_id": sport_id, "disciplines": rows, "total_count": len(rows) }
@@ -404,6 +468,80 @@ def get_normative_by_id_json(normative_id: int):
     conn.close()
 
 
+@app.get("/v_1/normative/{normative_id}")
+def get_normative_by_id_v1_json(normative_id: int):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    query = """
+    SELECT 
+        rs.id AS sport_id,
+        rs.sport_name,
+        rd.id AS discipline_id,
+        rd.discipline_name,
+        rd.discipline_code,
+        rr.id AS rank_id,
+        rr.short_name AS rank_short,
+        rr.full_name AS rank_full,
+        rr.prestige AS rank_prestige,
+        rreq.requirement_value,
+        c.condition,
+        rpt.type_name AS param_type,
+        rp.parameter_value AS param_value
+    FROM normatives n
+    JOIN ref_ranks rr ON rr.id = n.rank_id
+    JOIN conditions c ON c.normative_id = n.id
+    JOIN ref_requirements rreq ON rreq.id = c.requirement_id
+    JOIN groups g ON g.normative_id = n.id
+    JOIN lnk_discipline_parameters ldp ON ldp.id = g.discipline_parameter_id
+    JOIN ref_disciplines rd ON rd.id = ldp.discipline_id
+    JOIN ref_parameters rp ON rp.id = ldp.parameter_id
+    JOIN ref_parameters_types rpt ON rpt.id = rp.parameter_type_id
+    JOIN ref_sports rs ON rs.id = rd.sport_id
+    WHERE n.id = %s;
+    """
+
+    cur.execute(query, (normative_id,))
+    rows = cur.fetchall()
+    conn.close()
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="Normative not found")
+
+    parameters = {}
+    conditions = {}
+
+    for row in rows:
+        if row["param_type"] and row["param_value"]:
+            parameters[row["param_type"]] = row["param_value"]
+
+        if row["requirement_value"] and row["condition"]:
+            conditions[row["requirement_value"]] = row["condition"]
+
+    first = rows[0]
+
+    return {
+        "id": normative_id,
+        "sport": {
+            "id": first["sport_id"],
+            "name": first["sport_name"]
+        },
+        "discipline": {
+            "id": first["discipline_id"],
+            "name": first["discipline_name"],
+            "code": first["discipline_code"]
+        },
+        "rank": {
+            "id": first["rank_id"],
+            "short": first["rank_short"],
+            "full": first["rank_full"],
+            "prestige": first["rank_prestige"]
+        },
+        "parameters": parameters,
+        "conditions": conditions
+    }
+
+
 @app.get("/sports/{sport_id}/normatives")
 def get_normatives_for_sport_json(sport_id: int):
   conn = get_conn()
@@ -505,6 +643,89 @@ def get_normatives_for_sport_json(sport_id: int):
     "normatives": normatives_data,
     "total_count": len(normatives_data)
   }
+
+
+@app.get("/v_1/sports/{sport_id}/normatives")
+def get_normatives_for_sport_v1_json(sport_id: int):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    query = """
+    SELECT 
+        rs.id AS sport_id,
+        rs.sport_name,
+        rd.id AS discipline_id,
+        rd.discipline_name,
+        rd.discipline_code,
+        rr.id AS rank_id,
+        rr.short_name AS rank_short,
+        rr.full_name AS rank_full,
+        rr.prestige AS rank_prestige,
+        rreq.requirement_value,
+        c.condition,
+        n.id AS normative_id,
+        rpt.type_name AS param_type,
+        rp.parameter_value AS param_value
+    FROM normatives n
+    JOIN groups g ON g.normative_id = n.id
+    JOIN lnk_discipline_parameters ldp ON ldp.id = g.discipline_parameter_id
+    JOIN ref_disciplines rd ON rd.id = ldp.discipline_id
+    JOIN ref_parameters rp ON rp.id = ldp.parameter_id
+    JOIN ref_parameters_types rpt ON rpt.id = rp.parameter_type_id
+    JOIN conditions c ON c.normative_id = n.id
+    JOIN ref_requirements rreq ON rreq.id = c.requirement_id
+    JOIN ref_ranks rr ON rr.id = n.rank_id
+    JOIN ref_sports rs ON rs.id = rd.sport_id
+    WHERE rs.id = %s
+    ORDER BY 
+        rd.discipline_name,
+        rr.prestige DESC;
+    """
+
+    cur.execute(query, (sport_id,))
+    rows = cur.fetchall()
+    conn.close()
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="Sport or normatives not found")
+
+    normatives = {}
+
+    for row in rows:
+        nid = row["normative_id"]
+
+        if nid not in normatives:
+            normatives[nid] = {
+                "id": nid,
+                "discipline_id": row["discipline_id"],
+                "discipline_name": row["discipline_name"],
+                "discipline_code": row["discipline_code"],
+                "rank": {
+                    "id": row["rank_id"],
+                    "short": row["rank_short"],
+                    "full": row["rank_full"],
+                    "prestige": row["rank_prestige"]
+                },
+                "discipline_parameters": {},
+                "conditions": {}
+            }
+
+        # Параметры дисциплины
+        if row["param_type"] and row["param_value"]:
+            normatives[nid]["discipline_parameters"][row["param_type"]] = row["param_value"]
+
+        # Условия норматива
+        if row["requirement_value"] and row["condition"]:
+            normatives[nid]["conditions"][row["requirement_value"]] = row["condition"]
+
+    normatives_list = list(normatives.values())
+
+    return {
+        "sport_id": rows[0]["sport_id"],
+        "sport_name": rows[0]["sport_name"],
+        "normatives": normatives_list,
+        "total_count": len(normatives_list)
+    }
 
 
 # === POST - запросы ===
