@@ -658,7 +658,6 @@ def get_normatives_by_discipline_v1_json(discipline_id: int):
         rd.id AS discipline_id,
         rd.discipline_name,
         rd.discipline_code,
-        rd.image_url,
 
         n.id AS normative_id,
 
@@ -666,18 +665,16 @@ def get_normatives_by_discipline_v1_json(discipline_id: int):
         rr.short_name AS rank_short,
         rr.full_name AS rank_full,
         rr.prestige AS rank_prestige,
-        
+
         rpt.type_name AS param_type,
         rp.parameter_value AS param_value,
-        
+
         rreq.requirement_type_id AS requirement_type_id,
         rreq.requirement_value AS condition_name,
         c.condition AS condition_value,
-        
-        c.id AS condition_id,
 
-        ar.add_requirement_id AS add_type,
-        ar.add_requirement AS add_value
+        c.id AS condition_id,
+        c.parent_id AS condition_parent_id
 
     FROM normatives n
     JOIN groups g ON g.normative_id = n.id
@@ -690,14 +687,15 @@ def get_normatives_by_discipline_v1_json(discipline_id: int):
 
     JOIN conditions c ON c.normative_id = n.id
     JOIN ref_requirements rreq ON rreq.id = c.requirement_id
-    
-    LEFT JOIN add_requirements ar ON ar.condition_id = c.id
 
     JOIN ref_ranks rr ON rr.id = n.rank_id
 
     WHERE rd.id = %s
 
-    ORDER BY rr.prestige DESC;
+    ORDER BY 
+        n.id,
+        c.parent_id NULLS FIRST,
+        c.id;
     """
 
     cur.execute(query, (discipline_id,))
@@ -716,52 +714,79 @@ def get_normatives_by_discipline_v1_json(discipline_id: int):
     normatives = {}
 
     for row in rows:
-        nid = row["normative_id"]
+      nid = row["normative_id"]
 
-        if nid not in normatives:
-            normatives[nid] = {
-                "id": nid,
-                "rank": {
-                    "id": row["rank_id"],
-                    "short": row["rank_short"],
-                    "full": row["rank_full"],
-                    "prestige": row["rank_prestige"],
-                },
-                "discipline_parameters": {},
-                "conditions": []
-            }
+      if nid not in normatives:
+        normatives[nid] = {
+          "id": nid,
+          "rank": {
+            "id": row["rank_id"],
+            "short": row["rank_short"],
+            "full": row["rank_full"],
+            "prestige": row["rank_prestige"],
+          },
+          "discipline_parameters": [],
+          # сюда временно складываем ВСЕ условия (плоско)
+          "_all_conditions": {},
+          # итоговый список верхнего уровня
+          "conditions": []
+        }
 
-        # === Параметры дисциплины (агрегация в объект) ===
-        if row["param_type"] and row["param_value"]:
-            normatives[nid]["discipline_parameters"][row["param_type"]] = row["param_value"]
+      normative = normatives[nid]
 
-        # === Поиск существующего условия, чтобы не дублировать ===
-        existing_condition = None
-        for cond in normatives[nid]["conditions"]:
-            if cond["condition_name"] == row["condition_name"] and \
-               cond["condition_value"] == row["condition_value"]:
-                existing_condition = cond
-                break
+      # ===== ПАРАМЕТРЫ дисциплины =====
+      if row["param_type"]:
+        exists = any(
+          p["type"] == row["param_type"]
+          for p in normative["discipline_parameters"]
+        )
+        if not exists:
+          normative["discipline_parameters"].append({
+            "type": row["param_type"],
+            "value": row["param_value"]
+          })
 
-        # === Если условия ещё нет — создаём ===
-        if not existing_condition and row["condition_name"]:
-            new_cond = {
-	              "condition_id": row["condition_id"],
-                "condition_type": "other",
-                "condition_name": row["condition_name"],
-                "condition_value": row["condition_value"],
-                "additional": []
-            }
-            normatives[nid]["conditions"].append(new_cond)
-            existing_condition = new_cond
+      # ===== СОБИРАЕМ ВСЕ УСЛОВИЯ В СЛОВАРЬ =====
+      cond_id = row["condition_id"]
 
-        # === Добавляем дополнительные требования ===
-        if row["add_type"] and row["add_value"]:
-            existing_condition["additional"].append({
-                # "condition_type": row["add_type"],
-                "condition_name": row["add_type"],   # можно заменить на ref_add_types при желании
-                "condition_value": row["add_value"]
-            })
+      if cond_id not in normative["_all_conditions"]:
+        # определяем тип
+        if row["requirement_type_id"] == 1:
+          ctype = "norm"
+        elif row["requirement_type_id"] == 2:
+          ctype = "comp"
+        else:
+          ctype = "other"
+
+        normative["_all_conditions"][cond_id] = {
+          "id": cond_id,
+          "type": ctype,
+          "name": row["condition_name"],
+          "value": row["condition_value"],
+          "parent_id": row["condition_parent_id"],
+          "additional": []
+        }
+
+    # === Второй проход: собираем дерево условий ===
+    for nid, normative in normatives.items():
+
+      all_conds = normative["_all_conditions"]
+      roots = []
+
+      # связываем детей с родителями
+      for cond in all_conds.values():
+        pid = cond["parent_id"]
+
+        if pid and pid in all_conds:
+          all_conds[pid]["additional"].append(cond)
+        else:
+          roots.append(cond)
+
+      # кладём только верхний уровень в ответ
+      normative["conditions"] = roots
+
+      # временное поле больше не нужно
+      del normative["_all_conditions"]
 
     return {
         "sport_id": first["sport_id"],
@@ -769,7 +794,6 @@ def get_normatives_by_discipline_v1_json(discipline_id: int):
         "discipline_id": first["discipline_id"],
         "discipline_name": first["discipline_name"],
         "discipline_code": first["discipline_code"],
-        "image_url": first["image_url"],
         "normatives": list(normatives.values()),
         "total_count": len(normatives),
     }
