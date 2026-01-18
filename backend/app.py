@@ -164,14 +164,20 @@ def get_sports_v1_json():
 
 
 @app.get("/disciplines")
-def list_disciplines_json():
+def list_disciplines_json(sport_id: Optional[int] = Query(None, description="Фильтр по виду спорта")):
   conn = get_conn()
   cur = conn.cursor()
 
   try:
-    cur.execute(
-      "SELECT sport_id, id AS discipline_id, discipline_name, discipline_code FROM ref_disciplines ORDER BY discipline_name",
-    )
+    if sport_id is not None:
+      cur.execute(
+        "SELECT id, sport_id, discipline_name, discipline_code FROM ref_disciplines WHERE sport_id = %s ORDER BY discipline_name",
+        (sport_id,)
+      )
+    else:
+      cur.execute(
+        "SELECT id, sport_id, discipline_name, discipline_code FROM ref_disciplines ORDER BY discipline_name"
+      )
     rows = [row_to_dict(r) for r in cur.fetchall()]
     conn.close()
     return { "disciplines": rows, "total_count": len(rows) }
