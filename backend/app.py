@@ -651,6 +651,160 @@ def get_normatives_for_sport_json(sport_id: int):
   }
 
 
+@app.get("/v_1/disciplines/{discipline_id}/normatives")
+def get_normatives_by_discipline_v1_json(discipline_id: int):
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    query = """
+    SELECT 
+        rs.id AS sport_id,
+        rs.sport_name,
+        rd.id AS discipline_id,
+        rd.discipline_name,
+        rd.discipline_code,
+
+        n.id AS normative_id,
+
+        rr.id AS rank_id,
+        rr.short_name AS rank_short,
+        rr.full_name AS rank_full,
+        rr.prestige AS rank_prestige,
+
+        rpt.type_name AS param_type,
+        rp.parameter_value AS param_value,
+
+        rreq.requirement_type_id AS requirement_type_id,
+        rreq.requirement_value AS condition_name,
+        c.condition AS condition_value,
+
+        c.id AS condition_id,
+        c.parent_id AS condition_parent_id
+
+    FROM normatives n
+    JOIN groups g ON g.normative_id = n.id
+    JOIN lnk_discipline_parameters ldp ON ldp.id = g.discipline_parameter_id
+    JOIN ref_disciplines rd ON rd.id = ldp.discipline_id
+    JOIN ref_sports rs ON rs.id = rd.sport_id
+
+    JOIN ref_parameters rp ON rp.id = ldp.parameter_id
+    JOIN ref_parameters_types rpt ON rpt.id = rp.parameter_type_id
+
+    JOIN conditions c ON c.normative_id = n.id
+    JOIN ref_requirements rreq ON rreq.id = c.requirement_id
+
+    JOIN ref_ranks rr ON rr.id = n.rank_id
+
+    WHERE rd.id = %s
+
+    ORDER BY 
+        n.id,
+        c.parent_id NULLS FIRST,
+        c.id;
+    """
+
+    cur.execute(query, (discipline_id,))
+    rows = cur.fetchall()
+    conn.close()
+
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Discipline {discipline_id} not found or has no normatives"
+        )
+
+    # === Берём общие данные из первой строки ===
+    first = rows[0]
+
+    normatives = {}
+
+    for row in rows:
+      nid = row["normative_id"]
+
+      if nid not in normatives:
+        normatives[nid] = {
+          "id": nid,
+          "rank": {
+            "id": row["rank_id"],
+            "short": row["rank_short"],
+            "full": row["rank_full"],
+            "prestige": row["rank_prestige"],
+          },
+          "discipline_parameters": [],
+          # сюда временно складываем ВСЕ условия (плоско)
+          "_all_conditions": {},
+          # итоговый список верхнего уровня
+          "conditions": []
+        }
+
+      normative = normatives[nid]
+
+      # ===== ПАРАМЕТРЫ дисциплины =====
+      if row["param_type"]:
+        exists = any(
+          p["type"] == row["param_type"]
+          for p in normative["discipline_parameters"]
+        )
+        if not exists:
+          normative["discipline_parameters"].append({
+            "type": row["param_type"],
+            "value": row["param_value"]
+          })
+
+      # ===== СОБИРАЕМ ВСЕ УСЛОВИЯ В СЛОВАРЬ =====
+      cond_id = row["condition_id"]
+
+      if cond_id not in normative["_all_conditions"]:
+        # определяем тип
+        if row["requirement_type_id"] == 1:
+          ctype = "norm"
+        elif row["requirement_type_id"] == 2:
+          ctype = "comp"
+        else:
+          ctype = "other"
+
+        normative["_all_conditions"][cond_id] = {
+          "id": cond_id,
+          "type": ctype,
+          "name": row["condition_name"],
+          "value": row["condition_value"],
+          "parent_id": row["condition_parent_id"],
+          "additional": []
+        }
+
+    # === Второй проход: собираем дерево условий ===
+    for nid, normative in normatives.items():
+
+      all_conds = normative["_all_conditions"]
+      roots = []
+
+      # связываем детей с родителями
+      for cond in all_conds.values():
+        pid = cond["parent_id"]
+
+        if pid and pid in all_conds:
+          all_conds[pid]["additional"].append(cond)
+        else:
+          roots.append(cond)
+
+      # кладём только верхний уровень в ответ
+      normative["conditions"] = roots
+
+      # временное поле больше не нужно
+      del normative["_all_conditions"]
+
+    return {
+        "sport_id": first["sport_id"],
+        "sport_name": first["sport_name"],
+        "discipline_id": first["discipline_id"],
+        "discipline_name": first["discipline_name"],
+        "discipline_code": first["discipline_code"],
+        "normatives": list(normatives.values()),
+        "total_count": len(normatives),
+    }
+
+
 @app.get("/v_1/sports/{sport_id}/normatives")
 def get_normatives_for_sport_v1_json(sport_id: int):
     conn = get_conn()
