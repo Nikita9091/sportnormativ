@@ -111,10 +111,10 @@ class LinkDeletePayload(BaseModel):
 def get_sports_json():
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("SELECT id, sport_name, t.type_name"
-                "FROM ref_sports "
-                "LEFT JOIN ref_sport_types t ON s.sport_type_id = t.id"
-                "ORDER BY sport_name")
+    cur.execute('''SELECT id, sport_name, t.type_name
+                FROM ref_sports
+                LEFT JOIN ref_sport_types t ON sport_type_id = t.id
+                ORDER BY sport_name''')
     rows = [row_to_dict(r) for r in cur.fetchall()]
     conn.close()
     return {"sports": rows}
