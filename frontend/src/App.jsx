@@ -8,6 +8,7 @@ import LinkManager from "./components/LinkManager";
 import NormativeManager from "./components/NormativeManager";
 import NormativePage from "./components/NormativePage";
 import RequirementManager from "./components/RequirementManager"
+import CatalogPage from "./pages/CatalogPage";
 import API_CONFIG from './config/api';
 
 const API = API_CONFIG.baseURL;
@@ -273,6 +274,7 @@ export default function App() {
   return (
     <Router>
       <Routes>
+        <Route path="/catalog" element={<CatalogPage />} />
         <Route path="/normatives/:sport_id" element={<NormativePage />} />
         <Route path="/" element={<MainApp />} />
       </Routes>
