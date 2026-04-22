@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NormaSport - Спортивные нормативы</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+	<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&family=Sofia+Sans+Extra+Condensed:ital,wght@0,1..1000;1,1..1000&display=swap" rel="stylesheet">
+    <style>
+        /* ===== RESET & BASE ===== */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: auto;
+            min-height: 100%;
+        }
+
+        body {
+            font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #ffffff;
+            color: #071A14;
+            width: 100%;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+
+        /* ===== WRAPPER — единый контейнер для центрирования ===== */
+        .wrapper {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 0 5rem;
+            position: relative;
+        }
+
+        /* ===== ДЕКОРАТИВНЫЙ ФОН (body-level, не мешает потоку) ===== */
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: clamp(450px, 112vh, 1040px);
+            background: linear-gradient(5.1deg, rgba(217, 217, 217, 0) 42.19%, #259572 96.17%);
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* ===== HEADER ===== */
+        header {
+            background: transparent;
+            padding: 2.4rem 8% 1.25rem 8%;
+            display: flex;
+            width: 100%;
+            align-items: center;
+            justify-content: space-between;
+            position: absolute;
+            left: 0;
+            z-index: 100;
+            backdrop-filter: blur(1px);
+            -webkit-backdrop-filter: blur(1px);
+        }
+
+        header.sticky {
+            position: fixed;
+            top: 0;
+			padding: 1.25rem 7%;
+            transform: translateY(-100%);
+            background: rgba(255,255,255,0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            animation: slideDown 0.2s forwards;
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-100%); }
+            to   { transform: translateY(0); }
+        }
+
+        .logo {
+            font-family: 'Nunito', sans-serif;
+            font-weight: 700;
+            font-size: 1.875rem;
+            color: #071A14;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        nav {
+            display: flex;
+            gap: 3rem;
+            flex: 1;
+            justify-content: center;
+        }
+
+        nav button {
+            background: transparent;
+            border: none;
+            font-family: 'Nunito', sans-serif;
+            font-weight: 700;
+            font-size: 15px;
+            color: #071A14;
+            text-transform: uppercase;
+            cursor: pointer;
+            padding: 0;
+            letter-spacing: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        nav button:hover  { opacity: 0.7; }
+        nav button:active { opacity: 0.5; }
+
+        .search-container {
+            width: 180px;
+            height: 30px;
+            border: 0.5px solid #071A14;
+            border-radius: 15px;
+            padding: 5px 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: transparent;
+            flex-shrink: 0;
+        }
+
+        .search-input {
+            border: none;
+            background: transparent;
+            font-family: 'Nunito', sans-serif;
+            font-weight: 400;
+            font-size: 0.95rem;
+            color: #071A14;
+            outline: none;
+            flex: 1;
+            width: 100%;
+        }
+
+        .search-input::placeholder { color: #071A14; opacity: 0.6; }
+
+        .search-icon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        /* ===== HERO SECTION ===== */
+        .hero-section {
+            position: relative;
+            width: 100%;
+			height: clamp(300px, 115vh, 1040px);
+            overflow: hidden;
+        }
+
+        /* SVG «солнышко» */
+        .sun-picture {
+            position: absolute;
+            width: clamp(300px, 50vw, 915px);
+            height: auto;
+			aspect-ratio: 1 / 1;
+            top: 38px;
+            left: -160px;
+            opacity: 0.4;
+			background: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/summer/sun.png') no-repeat center/cover;
+            pointer-events: none;
+            z-index: 4;
+            filter: drop-shadow(4px 4px 4px #114333);
+			scale: 1.15;
+        }
+
+        /* Декоративные картинки */
+		.hero-image-decoration {
+			position: absolute;
+			width: clamp(420px, 79vw, 1200px); 
+			/* Убираем жесткую высоту и заменяем на сохранение пропорций */
+			height: auto;
+			aspect-ratio: 1200 / 808;
+			right: -255px;
+			top: 20px;
+			background: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/image.png') no-repeat center/cover;
+			mix-blend-mode: darken;
+			transform: matrix(0, -1, -1, 0, 0, 0);
+			pointer-events: none;
+			opacity: 0.15;
+			z-index: 0;
+			scale: 0.85;
+		}
+
+        .sportsman-decoration {
+            position: absolute;
+            width: clamp(250px, 36vw, 533px);
+            height: auto;
+            aspect-ratio: 533 / 629;
+            top: 22%;
+            right: 5%;
+            background: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/summer/sportsman.png') no-repeat center/contain;
+            transform: matrix(-0.99, -0.14, -0.14, 0.99, 0, 0);
+            opacity: 1;
+            z-index: 4;
+            pointer-events: none;
+        }
+
+        .ball-decoration {
+            position: absolute;
+            width: clamp(60px, 7vw, 101px);
+            height: auto;
+            aspect-ratio: 1;
+            top: 69px;
+            right: 20%;
+            background: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/summer/ball.png') no-repeat center/contain;
+            z-index: 4;
+            pointer-events: none;
+        }
+
+        /* Промо-заголовок героя */
+        .promo-title {
+            position: relative;
+            z-index: 3;
+            padding-top: clamp(120px, 24vh, 200px);
+			padding-left: 8%;
+            font-family: 'Sofia Sans Extra Condensed', sans-serif;
+            font-weight: 900;
+            font-size: 110px;
+            line-height: 1.1;
+            text-transform: uppercase;
+            color: #114333;
+			opacity: 0.7;
+        }
+
+        /* ===== MAIN CONTENT ===== */
+        main {
+            position: relative;
+            z-index: 10;
+            padding-top: 0rem;
+        }
+
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            align-items: center;
+            width: 100%;
+        }
+
+        /* Заголовок секции выбора спорта */
+        .sport-selection-title {
+            width: 100%;
+            font-family: 'Nunito', sans-serif;
+            font-weight: 900;
+            font-size: clamp(1.25rem, 3vw, 2.25rem);
+            line-height: 110%;
+            color: #071A14;
+            text-align: left;
+        }
+
+        /* Строка фильтр-кнопок + сортировка */
+        .buttons-row {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+            width: 100%;
+        }
+
+        .sport-categories {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        /* Кнопки категорий */
+        .category-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem 1.25rem;
+            min-width: 100px;
+            height: 38px;
+            background: #FFFFFF;
+            border: 1px solid #95463D;
+            border-radius: 15px;
+            font-family: 'Nunito', sans-serif;
+            font-weight: 400;
+            font-size: 1rem;
+            line-height: 110%;
+            color: #95463D;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .category-btn.active       { background: #FFD5D0; }
+        .category-btn:hover        { background: #fff5f3; }
+        .category-btn.active:hover { background: #ffc9c2; }
+
+        /* Кнопка сортировки */
+        .sort-dropdown { flex-shrink: 0; }
+
+        .sort-btn {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem 0.75rem;
+            gap: 0.5rem;
+            height: 38px;
+            background: #FFFFFF;
+            border: 1px solid #95463D;
+            border-radius: 0;
+            font-family: 'Nunito', sans-serif;
+            font-weight: 600;
+            font-size: 1rem;
+            color: #95463D;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.2s ease;
+        }
+
+        .sort-btn:hover { background: #fff5f3; }
+
+        /* ===== SPORTS GRID ===== */
+		.sports-grid {
+			display: grid;
+			/* auto-fit заставляет колонки растягиваться, заполняя всю ширину */
+			grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); 
+			gap: 2rem;	
+			width: 100%;
+		}
+
+        .sport-card {
+            width: 100%;
+            aspect-ratio: 1;
+            background: #F9FFFC;
+            border-radius: 10px;
+            padding: 17px 22px;
+            box-shadow: 3px 3px 7px 0px #071A14;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .sport-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 5px 5px 12px 0px #071A14;
+        }
+
+        .sport-icon-img {
+            width: 88px;
+            height: 100px;
+            object-fit: contain;
+        }
+
+        .sport-card span {
+            font-family: 'Nunito', sans-serif;
+            font-weight: 700;
+            font-size: 1rem;
+            color: #1B6C53;
+            line-height: 1.2;
+        }
+
+        /* ===== NEWS SECTIONS (временно — изображения) ===== */
+        .news-section {
+            width: 100%;
+        }
+
+        .news-section img,
+        .records_title,
+        .sport_news {
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* Псевдоизображения через фон — сохраняем пропорции */
+        .records_title {
+            width: 100%;
+            aspect-ratio: 1184 / 427;
+            background: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/records_title.png') no-repeat center/contain;
+        }
+
+        .sport_news {
+            width: 100%;
+            aspect-ratio: 1154 / 418;
+            background: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/news_title.png') no-repeat center/cover;
+            margin-top: 2rem;
+        }
+
+        /* ===== FOOTER ===== */
+        footer {
+            position: relative;
+            width: 100%;
+            height: 204px;
+            margin-top: 4rem;
+            background: linear-gradient(185.1deg, rgba(217, 217, 217, 0) 32.19%, #259572 96.17%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .footer-logo {
+            font-family: 'Oswald', sans-serif;
+            font-weight: 700;
+            font-size: 2.25rem;
+            color: #071A14;
+            opacity: 0.5;
+        }
+
+        /* ===== MEDIA QUERIES ===== */
+
+        /* Планшет */
+        @media (max-width: 1024px) {
+			.promo-title {
+				font-size: 70px;
+			}
+            .hero-image-decoration {
+				scale: 0.7;
+				right: -350px;
+			}
+            .sportsman-decoration,
+            .ball-decoration {
+                opacity: 0.5;
+				scale: 0.85;
+				z-index: 2;
+            }
+			.sun-picture {
+                opacity: 0.5;
+				scale: 0.75;
+				top: -10%;
+				left: -25%;
+			}
+            .hero-section {
+                height: clamp(200px, 45vh, 540px);
+            }
+            nav {
+                display: none; /* скрываем на мобильных (можно добавить бургер) */
+            }
+            body::before {
+                height: clamp(200px, 45vh, 540px);
+            }
+        }
+
+        /* Мобильный */
+        @media (max-width: 767px) {
+            .wrapper {
+                padding: 0 1rem;
+            }
+
+			.search-container {
+				width: 140px;
+            	height: 20px;
+			}
+			.search-input {
+				font-size: smaller;
+			}
+			.search-icon {
+				width: 12px;
+				height: 12px;
+			}
+
+            .promo-title {
+                padding-top: 100px;
+            }
+
+			.logo {
+				font-size: smaller;
+			}
+
+            nav {
+                display: none; /* скрываем на мобильных (можно добавить бургер) */
+            }
+
+            .main-content {
+                gap: 1rem;
+                padding: 0.625rem 0;
+            }
+
+            .sport-categories {
+                gap: 0.5rem;
+            }
+
+            .category-btn {
+                font-size: 0.805rem;
+                padding: 0.4rem 0.875rem;
+                min-width: 80px;
+            }
+
+            .sports-grid {
+                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+                padding: 5px 5px;
+                gap: 1rem;
+            }
+			.sport-icon-img {
+				width: 79px;
+            	height: auto;
+			}
+
+            .sportsman-decoration,
+            .ball-decoration,
+			.sun-picture,
+			.hero-image-decoration {
+                display: none;
+            }
+        }
+
+        @media (max-width: 480px) {
+			.promo-title {
+				font-size: 60px;
+			}
+            .sports-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+			.sport-icon-img {
+				width: 65px;
+            	height: auto;
+			}
+        }
+    </style>
+</head>
+<body>
+
+    <!-- HEADER (вне wrapper — растягивается на всю ширину) -->
+    <header>
+        <div class="logo">NormaSport</div>
+        <nav>
+            <button>Главная</button>
+            <button>Инфо</button>
+            <button>ГТО</button>
+            <button>Новости</button>
+            <button>Контакты</button>
+        </nav>
+        <div class="search-container">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="#071A14" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Поиск">
+        </div>
+    </header>
+	<!-- HERO SECTION -->
+	<section class="hero-section">
+		<div class="sun-picture"></div>
+		<div class="hero-image-decoration"></div>
+		<div class="sportsman-decoration"></div>
+		<div class="ball-decoration"></div>
+
+		<div class="promo-title">
+			проверь свой<br>спортивный уровень!
+		</div>
+
+	</section><!-- /hero-section -->
+
+    <!-- ОБЩИЙ WRAPPER -->
+    <div class="wrapper">
+
+        <!-- MAIN -->
+        <main>
+            <div class="main-content">
+
+                <h2 class="sport-selection-title">Выбери вид спорта для поиска норматива</h2>
+
+                <!-- Строка кнопок + сортировка -->
+                <div class="buttons-row">
+                    <div class="sport-categories">
+                        <button class="category-btn active">Летние</button>
+                        <button class="category-btn">Зимние</button>
+                        <button class="category-btn">Адаптивные</button>
+                        <button class="category-btn">Национальные</button>
+                        <button class="category-btn">Неолимпийские</button>
+                        <button class="category-btn">ГТО</button>
+                    </div>
+                    <div class="sort-dropdown">
+                        <button class="sort-btn">
+                            <span>Сортировка</span>
+                            <svg width="13" height="8" viewBox="0 0 13 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M11.91 2.19345e-05L12.97 1.06102L7.193 6.84002C7.10043 6.93318 6.99036 7.0071 6.86911 7.05755C6.74786 7.108 6.61783 7.13397 6.4865 7.13397C6.35517 7.13397 6.22514 7.108 6.10389 7.05755C5.98264 7.0071 5.87257 6.93318 5.78 6.84002L0 1.06102L1.06 0.00102186L6.485 5.42502L11.91 2.19345e-05Z" fill="#95463D"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Сетка видов спорта -->
+                <div class="sports-grid" id="sports-grid"></div>
+
+                <!-- Новостные секции -->
+                <div class="news-section">
+                    <div class="records_title"></div>
+                </div>
+                <div class="news-section">
+                    <div class="sport_news"></div>
+                </div>
+
+            </div><!-- /main-content -->
+        </main>
+
+    </div><!-- /wrapper -->
+    <!-- FOOTER -->
+    <footer>
+        <div class="footer-logo">NormaSport</div>
+    </footer>
+
+    <script>
+        const sportsData = [
+            { id: 'badminton',          name: 'Бадминтон' },
+            { id: 'basketball',         name: 'Баскетбол' },
+            { id: 'baseball',           name: 'Бейсбол' },
+            { id: 'boks',               name: 'Бокс' },
+            { id: 'breaking',           name: 'Брейкинг' },
+            { id: 'artistic_gymnastics',name: 'Лёгкая атлетика' },
+            { id: 'golf',               name: 'Гольф' },
+            { id: 'football',           name: 'Футбол' },
+            { id: 'golf',               name: 'Гольф' },
+            { id: 'boks',               name: 'Бокс' },
+            { id: 'badminton',          name: 'Бадминтон' },
+            { id: 'basketball',         name: 'Баскетбол' },
+            { id: 'baseball',           name: 'Бейсбол' },
+            { id: 'boks',               name: 'Бокс' },
+            { id: 'breaking',           name: 'Брейкинг' },
+            { id: 'artistic_gymnastics',name: 'Лёгкая атлетика' },
+            { id: 'golf',               name: 'Гольф' },
+            { id: 'football',           name: 'Футбол' },
+            { id: 'golf',               name: 'Гольф' },
+            { id: 'boks',               name: 'Бокс' },
+            { id: 'football',           name: 'Футбол' },
+        ];
+
+        const grid    = document.getElementById('sports-grid');
+        const baseURL = "https://mirzemlyaniki.ru/pics/sportnormative_pics/summer/assets/";
+
+        sportsData.forEach(sport => {
+            const card = document.createElement('div');
+            card.className = 'sport-card';
+            card.innerHTML = `
+                <img src="${baseURL}${sport.id}.svg" alt="${sport.name}" class="sport-icon-img">
+                <span>${sport.name}</span>
+            `;
+            grid.appendChild(card);
+        });
+
+        // Sticky header при скролле
+        const header     = document.querySelector('header');
+        const headerH    = header.offsetHeight;
+
+        window.addEventListener('scroll', () => {
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            if (scrollTop > headerH + 30) {
+                if (!header.classList.contains('sticky')) header.classList.add('sticky');
+            } else {
+                header.classList.remove('sticky');
+            }
+        });
+    </script>
+</body>
+</html>
