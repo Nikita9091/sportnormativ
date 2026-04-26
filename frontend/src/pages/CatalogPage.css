@@ -2,14 +2,307 @@
 .catalog-page {
   font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: #ffffff;
-  color: #071A14;
+  color: #114333;
   width: 100%;
   overflow-x: hidden;
   overflow-y: auto;
-  min-height: 100vh;
+  min-height: 100%;
+  max-width: 1440px;
   display: flex;
+  box-shadow: 0 0 50px rgba(37, 149, 114, 0.45);
   flex-direction: column;
   position: relative;
+  margin: 0 auto;
+}
+/* =====================================================================
+   ТЕМЫ ПО КАТЕГОРИЯМ ВИДОВ СПОРТА
+   Переключаются через атрибут data-theme на .catalog-page
+   ===================================================================== */
+
+/* ─────────────────────────────────────────────────────────────────────
+   1. ЛЕТНИЕ (по умолчанию — зелёный, солнце, спортсмен, мяч)
+   ───────────────────────────────────────────────────────────────────── */
+.catalog-page[data-theme="Летний олимпийский"] {
+  color: #114333;
+  box-shadow: 0 0 50px rgba(37, 149, 114, 0.45);
+}
+.catalog-page[data-theme="Летний олимпийский"] .catalog-bg-gradient {
+  background: linear-gradient(5.1deg, rgba(217, 217, 217, 0) 42.19%, rgb(37, 149, 114) 96.17%);
+}
+.catalog-page[data-theme="Летний олимпийский"] .sun-picture {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/summer/sun.png');
+  opacity: 0.4;
+  filter: drop-shadow(4px 4px 4px #114333);
+}
+.catalog-page[data-theme="Летний олимпийский"] .hero-image-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/image.png');
+  mix-blend-mode: darken;
+  opacity: 0.08;
+}
+.catalog-page[data-theme="Летний олимпийский"] .sportsman-decoration {
+  background: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/summer/sportsman.png') no-repeat center/contain;
+  transform: matrix(-0.99, -0.14, -0.14, 0.99, 0, 0);
+}
+.catalog-page[data-theme="Летний олимпийский"] .ball-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/summer/ball.png');
+}
+.catalog-page[data-theme="Летний олимпийский"] .catalog-footer-gradient {
+  background: linear-gradient(185.64deg, rgba(217, 217, 217, 0) 32.34%, #259572 95.81%);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   2. ЗИМНИЕ (холодная синяя гамма, снежинка, лыжник)
+   ───────────────────────────────────────────────────────────────────── */
+.catalog-page[data-theme="Зимний олимпийский"] {
+  color: #182B8B;
+  box-shadow: 0 0 50px rgba(91, 155, 213, 0.45);
+}
+.catalog-page[data-theme="Зимний олимпийский"] .catalog-bg-gradient {
+  background: linear-gradient(5.1deg, #D9D9D900 42.19%, #57B1F4 96.17%);
+  z-index: 9;
+}
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+.catalog-page[data-theme="Зимний олимпийский"] .sun-picture {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/winter/snowflake-2.png');
+  position: absolute;
+  top: 129px;
+  left: -140px;
+  width: clamp(200px, 47vw, 687px);
+  aspect-ratio: 687/795;
+  scale: 1.08;
+  background-size: contain;
+  background-repeat: no-repeat;
+  opacity: 0.6; /* Золотая середина */
+  z-index: 100;
+
+  overflow: visible !important;
+  pointer-events: none; /* Чтобы она не мешала кликать по карточкам */
+}
+.catalog-page[data-theme="Зимний олимпийский"] .hero-image-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/image.png');
+  mix-blend-mode: multiply;
+  opacity: 0.07;
+}
+.catalog-page[data-theme="Зимний олимпийский"] .sportsman-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/winter/skier.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  position: absolute;
+  width: clamp(170px, 48vw, 704.4159850068885px);
+  height: auto;
+  aspect-ratio: 476.4457190369269 / 704.4159850068885;
+  top: 301px;
+  right: 7%;
+  opacity: 1;
+  z-index: 8;
+  pointer-events: none;
+}
+.catalog-page[data-theme="Зимний олимпийский"] .ball-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/winter/snowball.png');
+}
+.catalog-page[data-theme="Зимний олимпийский"] .catalog-footer-gradient {
+  background: linear-gradient(185.64deg, rgba(217, 217, 217, 0) 32.34%, #5B9BD5 95.81%);
+}
+.catalog-page[data-theme="Зимний олимпийский"] .catalog-search {
+  border: 0.5px solid #132061;
+}
+.catalog-page[data-theme="Зимний олимпийский"] .catalog-search-input::placeholder {
+  color: #132061;
+}
+.catalog-page[data-theme="Зимний олимпийский"] .catalog-sport-name {
+  color: #3E7AC3;
+}
+.catalog-page[data-theme="Зимний олимпийский"] .catalog-sport-card {
+  box-shadow: 3px 3px 7px 0px #182B8B;
+  background-color: #F6F8FF;
+}
+.catalog-page[data-theme="Зимний олимпийский"] .catalog-logo-icon {
+  background-image: url("https://mirzemlyaniki.ru/pics/sportnormative_pics/winter/main-icon.svg");
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────
+   3. НЕОЛИМПИЙСКИЕ (фиолетовая гамма, паркур/экстрим)
+   ───────────────────────────────────────────────────────────────────── */
+.catalog-page[data-theme="Неолимпийский"] {
+  color: #1B004F;
+  box-shadow: 0 0 50px rgba(142, 92, 201, 0.45);
+}
+.catalog-page[data-theme="Неолимпийский"] .catalog-bg-gradient {
+  background: linear-gradient(5.1deg, #D9D9D900 42.19%, #AC82FF 96.17%);
+}
+.catalog-page[data-theme="Неолимпийский"] .sun-picture {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/neolympic/star.svg');
+  position: absolute;
+  top: 225px;
+  left: -149px;
+  width: clamp(200px, 47vw, 706px);
+  aspect-ratio: 706/671;
+  background-size: contain;
+  background-repeat: no-repeat;
+  opacity: 0.4; /* Золотая середина */
+  z-index: 100;
+  overflow: visible !important;
+  pointer-events: none; /* Чтобы она не мешала кликать по карточкам */
+}
+.catalog-page[data-theme="Неолимпийский"] .hero-image-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/image.png');
+  mix-blend-mode: multiply;
+  opacity: 0.08;
+}
+.catalog-page[data-theme="Неолимпийский"] .sportsman-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/neolympic/car.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  position: absolute;
+  width: clamp(170px, 48vw, 824px);
+  height: auto;
+  aspect-ratio: 476.4457190369269 / 704.4159850068885;
+  top: 378px;
+  right: 0;
+  opacity: 1;
+  z-index: 3;
+  pointer-events: none;
+}
+.catalog-page[data-theme="Неолимпийский"] .ball-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/neolympic/skate.png');
+}
+.catalog-page[data-theme="Неолимпийский"] .catalog-footer-gradient {
+  background: linear-gradient(185.64deg, rgba(217, 217, 217, 0) 32.34%, #8E5CC9 95.81%);
+}
+.catalog-page[data-theme="Неолимпийский"] .catalog-logo-icon {
+  background-image: url("https://mirzemlyaniki.ru/pics/sportnormative_pics/neolympic/main-icon.svg");
+}
+.catalog-page[data-theme="Неолимпийский"] .catalog-search {
+  border: 0.5px solid #132061;
+}
+.catalog-page[data-theme="Неолимпийский"] .catalog-search-input::placeholder {
+  color: #132061;
+}
+.catalog-page[data-theme="Неолимпийский"] .catalog-sport-name {
+  color: #3D00B5;
+}
+.catalog-page[data-theme="Неолимпийский"] .catalog-sport-card {
+  box-shadow: 3px 3px 7px 0px #071A14;
+  background-color: #FCF9FF;
+}
+.catalog-page[data-theme="Неолимпийский"] .promo-title {
+  color: #1B004F;
+}
+.catalog-page[data-theme="Неолимпийский"] .sport-selection-title {
+  color: #3D00B5;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   4. ВОЕННЫЕ (хаки/олив, военно-прикладной спорт)
+   ───────────────────────────────────────────────────────────────────── */
+.catalog-page[data-theme="Военно-прикладной и служебно-прикладной"] {
+  color: #2B3A1A;
+  box-shadow: 0 0 50px rgba(107, 122, 64, 0.45);
+}
+.catalog-page[data-theme="Военно-прикладной и служебно-прикладной"] .catalog-bg-gradient {
+  background: linear-gradient(5.1deg, rgba(217, 217, 217, 0) 42.19%, rgb(107, 122, 64) 96.17%);
+}
+.catalog-page[data-theme="Военно-прикладной и служебно-прикладной"] .sun-picture {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/military/star.png');
+  opacity: 0.35;
+  filter: drop-shadow(4px 4px 4px #2B3A1A);
+}
+.catalog-page[data-theme="Военно-прикладной и служебно-прикладной"] .hero-image-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/image.png');
+  mix-blend-mode: multiply;
+  opacity: 0.1;
+}
+.catalog-page[data-theme="Военно-прикладной и служебно-прикладной"] .sportsman-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/military/soldier.png');
+}
+.catalog-page[data-theme="Военно-прикладной и служебно-прикладной"] .ball-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/military/target.png');
+}
+.catalog-page[data-theme="Военно-прикладной и служебно-прикладной"] .catalog-footer-gradient {
+  background: linear-gradient(185.64deg, rgba(217, 217, 217, 0) 32.34%, #6B7A40 95.81%);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   5. НАЦИОНАЛЬНЫЕ (тёплая золотисто-красная гамма)
+   ───────────────────────────────────────────────────────────────────── */
+.catalog-page[data-theme="Национальный"] {
+  color: #5A1F14;
+  box-shadow: 0 0 50px rgba(210, 127, 61, 0.45);
+}
+.catalog-page[data-theme="Национальный"] .catalog-bg-gradient {
+  background: linear-gradient(5.1deg, rgba(217, 217, 217, 0) 42.19%, rgb(210, 127, 61) 96.17%);
+}
+.catalog-page[data-theme="Национальный"] .sun-picture {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/national/ornament.png');
+  opacity: 0.4;
+  filter: drop-shadow(4px 4px 4px #5A1F14);
+}
+.catalog-page[data-theme="Национальный"] .hero-image-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/image.png');
+  mix-blend-mode: multiply;
+  opacity: 0.09;
+}
+.catalog-page[data-theme="Национальный"] .sportsman-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/national/wrestler.png');
+}
+.catalog-page[data-theme="Национальный"] .ball-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/national/gorodki.png');
+}
+.catalog-page[data-theme="Национальный"] .catalog-footer-gradient {
+  background: linear-gradient(185.64deg, rgba(217, 217, 217, 0) 32.34%, #D27F3D 95.81%);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   6. АДАПТИВНЫЕ (спокойная бирюзово-лавандовая гамма)
+   ───────────────────────────────────────────────────────────────────── */
+.catalog-page[data-theme="Адаптивный"] {
+  color: #1F3A4C;
+  box-shadow: 0 0 50px rgba(86, 170, 182, 0.45);
+}
+.catalog-page[data-theme="Адаптивный"] .catalog-bg-gradient {
+  background: linear-gradient(5.1deg, rgba(217, 217, 217, 0) 42.19%, rgb(86, 170, 182) 96.17%);
+}
+.catalog-page[data-theme="Адаптивный"] .sun-picture {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/adaptive/heart.png');
+  opacity: 0.4;
+  filter: drop-shadow(4px 4px 4px #1F3A4C);
+}
+.catalog-page[data-theme="Адаптивный"] .hero-image-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/image.png');
+  mix-blend-mode: multiply;
+  opacity: 0.08;
+}
+.catalog-page[data-theme="Адаптивный"] .sportsman-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/adaptive/athlete.png');
+}
+.catalog-page[data-theme="Адаптивный"] .ball-decoration {
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/adaptive/medal.png');
+}
+.catalog-page[data-theme="Адаптивный"] .catalog-footer-gradient {
+  background: linear-gradient(185.64deg, rgba(217, 217, 217, 0) 32.34%, #56AAB6 95.81%);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   ПЛАВНЫЕ ПЕРЕХОДЫ ПРИ СМЕНЕ ТЕМЫ
+   ───────────────────────────────────────────────────────────────────── */
+.catalog-page,
+.catalog-bg-gradient,
+.catalog-footer-gradient {
+  transition: background 0.45s ease, color 0.45s ease, box-shadow 0.45s ease;
+}
+.sun-picture,
+.hero-image-decoration,
+.sportsman-decoration,
+.ball-decoration {
+  transition: opacity 0.35s ease, filter 0.35s ease;
 }
 
 /* Reset global button styles inside catalog */
@@ -33,8 +326,8 @@
   top: 0;
   left: 0;
   width: 100%;
-  height: clamp(450px, 112vh, 1040px);
-  background: linear-gradient(5.1deg, rgba(217, 217, 217, 0) 42.19%, #259572 96.17%);
+  height: clamp(650px, 122vh, 1040px);
+  background: linear-gradient(5.1deg, rgba(217, 217, 217, 0) 42.19%, rgb(37, 149, 114) 96.17%);
   pointer-events: none;
   z-index: 5;
 }
@@ -42,15 +335,15 @@
 /* ===== WRAPPER ===== */
 .catalog-wrapper {
   max-width: 1440px;
-  margin: 0 auto;
-  padding: 0 0;
+  margin: 0 8%;
+  padding: 180px 10px;
   position: relative;
 }
 
 /* ===== HEADER ===== */
 .catalog-header {
   background: transparent;
-  padding: 2.4rem 8% 1.25rem 8%;
+  padding: 1.4rem 8% 1.25rem 8%;
   display: flex;
   width: 100%;
   align-items: center;
@@ -58,7 +351,7 @@
   position: absolute;
   left: 0;
   top: 0;
-  z-index: 100;
+  z-index: 1000;
   backdrop-filter: blur(1px);
   -webkit-backdrop-filter: blur(1px);
   box-sizing: border-box;
@@ -82,12 +375,25 @@
 }
 
 .catalog-logo {
-  font-family: 'Nunito', sans-serif;
+  font-family: 'Sofia Sans Condensed', sans-serif;
   font-weight: 700;
-  font-size: 1.875rem;
-  color: #071A14;
+  font-size: 1.825rem;
+  display: flex;
   line-height: 1;
   flex-shrink: 0;
+  gap: 8px;
+  line-height: 100%;
+  align-items: center;
+}
+
+.catalog-logo-icon {
+  width: 2.975rem;
+  height: auto;
+  background-image: url("https://mirzemlyaniki.ru/pics/sportnormative_pics/summer/main-icon.svg");
+  background-repeat: no-repeat;
+  background-size: contain;
+  aspect-ratio: 1 / 1;
+  z-index: 10;
 }
 
 .catalog-nav {
@@ -101,7 +407,6 @@
   font-family: 'Nunito', sans-serif;
   font-weight: 700;
   font-size: 15px;
-  color: #071A14;
   text-transform: uppercase;
   letter-spacing: 0;
   transition: opacity 0.2s ease;
@@ -112,7 +417,7 @@
 .catalog-search {
   width: 180px;
   height: 30px;
-  border: 0.5px solid #071A14;
+  border: 0.5px solid #114333;
   border-radius: 15px;
   padding: 5px 10px;
   display: flex;
@@ -135,61 +440,73 @@
   font-family: 'Nunito', sans-serif;
   font-weight: 400;
   font-size: 0.95rem;
-  color: #071A14;
   outline: none;
   flex: 1;
   width: 100%;
 }
-.catalog-search-input::placeholder { color: #071A14; opacity: 0.6; }
 
 /* ===== HERO SECTION ===== */
 .catalog-hero {
   position: relative;
   width: 100%;
-  height: clamp(300px, 115vh, 1040px);
-  overflow: hidden;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
 }
 
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
 .sun-picture {
   position: absolute;
-  width: clamp(300px, 50vw, 915px);
+  width: clamp(200px, 62vw, 915px);
   height: auto;
   aspect-ratio: 1 / 1;
-  top: 38px;
-  left: -160px;
+  top: 10px;
+  left: -296px;
   opacity: 0.4;
   background: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/summer/sun.png') no-repeat center/cover;
   pointer-events: none;
   z-index: 4;
-  filter: drop-shadow(4px 4px 4px #114333);
-  scale: 1.15;
+  will-change: transform; /* Подготавливает видеокарту к плавной анимации */
+  backface-visibility: hidden; /* Убирает возможные мерцания при вращении */
+  animation: spin-slow 45s linear infinite;
 }
 
 .hero-image-decoration {
-  position: absolute;
+  position: relative; /* Теперь картинка занимает место в документе */
   width: clamp(420px, 79vw, 1200px);
   height: auto;
   aspect-ratio: 1200 / 808;
-  right: -20%;
-  top: 20px;
+  
+  /* Вместо right: -23% используем margin, чтобы не оставлять пустую дыру */
+  margin-left: auto; 
+  margin-right: -23%; 
+  
+  top: 50px;
   background: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/image.png') no-repeat center/cover;
   mix-blend-mode: darken;
-  transform: matrix(0, -1, -1, 0, 0, 0);
+  
+  /* Трансформации не влияют на место в потоке, блок считается по его исходным размерам */
+  transform: matrix(0, -1, -1, 0, 0, 0); 
   pointer-events: none;
-  opacity: 0.15;
+  opacity: 0.08;
   z-index: 0;
   scale: 0.85;
 }
 
 .sportsman-decoration {
   position: absolute;
-  width: clamp(250px, 36vw, 533px);
+  width: clamp(170px, 36vw, 532.68px);
   height: auto;
-  aspect-ratio: 533 / 629;
-  top: 22%;
-  right: 5%;
-  background: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/summer/sportsman.png') no-repeat center/contain;
-  transform: matrix(-0.99, -0.14, -0.14, 0.99, 0, 0);
+  aspect-ratio: 532.68 / 628.75;
+  top: 200.32px;
+  right: 53.11px;
   opacity: 1;
   z-index: 4;
   pointer-events: none;
@@ -197,10 +514,10 @@
 
 .ball-decoration {
   position: absolute;
-  width: clamp(60px, 7vw, 101px);
+  width: clamp(50px, 6.75vw, 101px);
   height: auto;
   aspect-ratio: 1;
-  top: 69px;
+  top: 89px;
   right: 20%;
   background: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/summer/ball.png') no-repeat center/contain;
   z-index: 4;
@@ -208,16 +525,15 @@
 }
 
 .promo-title {
-  position: relative;
+  position: absolute;
   z-index: 3;
-  padding-top: clamp(120px, 24vh, 200px);
+  padding-top: clamp(120px, 28vh, 153px);
   padding-left: 8%;
   font-family: 'Sofia Sans Extra Condensed', sans-serif;
   font-weight: 900;
-  font-size: clamp(60px, 100vw, 110px);
+  font-size: clamp(70px, 8vw, 110px);
   line-height: 1.1;
   text-transform: uppercase;
-  color: #114333;
   opacity: 0.7;
 }
 
@@ -225,7 +541,6 @@
 .catalog-main {
   position: relative;
   z-index: 10;
-  padding-top: 2rem;
   padding-bottom: 1rem;
 }
 
@@ -243,7 +558,6 @@
   font-weight: 900;
   font-size: clamp(1.25rem, 3vw, 2.25rem);
   line-height: 110%;
-  color: #071A14;
   text-align: left;
   margin: 0;
 }
@@ -323,7 +637,6 @@
   min-width: max(100%, 160px);
   background: white;
   border: 1px solid #95463D;
-  border-radius: 8px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   margin-top: 8px;
   z-index: 50;
@@ -349,7 +662,7 @@
 /* ===== SPORTS GRID ===== */
 .catalog-sports-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 2rem;
   width: 100%;
   padding: 15px 0 35px 0;
@@ -360,7 +673,7 @@
   aspect-ratio: 1/1.15;
   background: #F9FFFC;
   border-radius: 10px;
-  padding: 17px 22px;
+  padding: 1.55rem;
   box-shadow: 3px 3px 7px 0px #071A14;
   display: flex;
   flex-direction: column;
@@ -380,14 +693,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 88px;
-  height: 100px;
-  font-size: 3rem;
+  font-size: 1rem;
 }
 .catalog-sport-icon img {
-  width: 88px;
-  height: 100px;
+  width: 8rem;
+  height: auto;
   object-fit: contain;
+  padding: 0.2rem 0.5rem 0.5rem 0.5rem;
+  aspect-ratio: 1/1;
 }
 
 .catalog-sport-name {
@@ -395,7 +708,7 @@
   font-weight: 700;
   font-size: 1rem;
   color: #1B6C53;
-  line-height: 1.2;
+  line-height: 1.1;
   flex-shrink: 0;
 }
 
@@ -447,7 +760,7 @@
   bottom: 0;
   left: 0;
   width: 100%;
-  height: 560px;
+  height: 460px;
   background: linear-gradient(185.64deg, rgba(217, 217, 217, 0) 32.34%, #259572 95.81%);
   pointer-events: none;
   z-index: 0;
@@ -568,39 +881,79 @@
 .catalog-footer-social-btn svg { display: block; }
 
 /* ===== MEDIA QUERIES ===== */
-@media (max-width: 1024px) {
-  .promo-title { font-size: 70px; }
-  .hero-image-decoration { scale: 0.7; right: -350px; }
-  .sportsman-decoration,
-  .ball-decoration { opacity: 0.5; scale: 0.85; z-index: 2; }
-  .sun-picture { opacity: 0.5; scale: 0.75; top: -10%; left: -25%; }
-  .catalog-hero { height: clamp(200px, 95vh, 640px); }
-  .catalog-nav { display: none; }
-  .catalog-wrapper { margin: 0 1rem; }
-  .catalog-bg-gradient { height: clamp(200px, 45vh, 540px); }
+@media (max-width: 1280px) {
+  .catalog-nav button {
+    font-size: 12px;
+  }
+  .catlog-nav {
+    gap: 0.5rem;
+  }
+  .sportsman-decoration {
+    right: 39.11px;
+  }
 }
 
-@media (max-width: 767px) {
-  .catalog-wrapper { padding: 0 1rem; }
+@media (max-width: 1024px) {
+  .ball-decoration { top: 86px; }
+  .sportsman-decoration {
+    width: clamp(150px, 35vw, 532.68px);
+    top: 170px;
+    right: 37.11px;
+  }
+  .catalog-nav { display: none; }
+  .catalog-wrapper { margin: 0 3rem; }
+  .catalog-page[data-theme="Неолимпийский"] .sun-picture {
+    top: 200px;
+  }
+}
+
+@media (max-width: 830px) {
+  .sportsman-decoration {
+    width: clamp(150px, 32vw, 532.68px);
+    top: 170px;
+  }
+  .catalog-logo-icon {
+    width: 1.875rem;
+    height: auto;
+  }
+  .catalog-logo {
+    font-size: 1.5rem;
+  }
+  .catalog-nav { display: none; }
+  .catalog-wrapper { margin: 0 3rem; }
+  .catalog-header,
+  .catalog-header.sticky {
+    padding: 1.2rem 8% 1.2rem 8%;
+  }
+}
+
+@media (max-width: 780px) {
+  .catalog-hero { height: 400px; }
+  .catalog-wrapper { padding: 0 2rem; }
   .catalog-search { width: 140px; height: 20px; }
   .catalog-search-input { font-size: smaller; }
   .catalog-search-icon { width: 12px; height: 12px; }
-  .catalog-logo { font-size: smaller; }
   .catalog-nav { display: none; }
   .catalog-main-content { gap: 1rem; padding: 0.625rem 0; }
   .sport-categories { gap: 0.5rem; }
   .category-btn { font-size: 0.805rem; padding: 0.4rem 0.875rem; min-width: 80px; }
   .catalog-sports-grid {
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-    padding: 5px;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    padding: 1px;
     gap: 1rem;
   }
-  .catalog-sport-icon { width: 79px; height: 90px; }
-  .catalog-sport-icon img { width: 79px; height: 90px; }
+  .catalog-sport-name {
+    font-size: 0.75rem;
+  }
+  .catalog-sport-icon img{
+    padding: 0.2rem 0.5rem 0.6rem 0.5rem;
+  }
+  .catalog-bg-gradient { height: clamp(250px, 72vh, 540px);}
   .sportsman-decoration,
   .ball-decoration,
   .sun-picture,
-  .hero-image-decoration { display: none; }
+  .hero-image-decoration,
+  .catalog-news-section { display: none; }
   .catalog-footer-inner { padding: 2rem 1.25rem; gap: 1.5rem; }
   .catalog-footer-resources a,
   .catalog-footer-resources button { max-width: 160px; }
@@ -609,7 +962,5 @@
 
 @media (max-width: 480px) {
   .promo-title { font-size: 60px; }
-  .catalog-sports-grid { grid-template-columns: repeat(2, 1fr); }
-  .catalog-sport-icon { width: 65px; height: 74px; }
-  .catalog-sport-icon img { width: 65px; height: 74px; }
+  .catalog-footer { display: none;}
 }

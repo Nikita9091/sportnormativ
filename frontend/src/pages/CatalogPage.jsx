@@ -98,13 +98,16 @@ export default function CatalogPage() {
   }, [sports, selectedCategory, searchQuery, currentSort]);
 
   return (
-    <div className="catalog-page">
+    <div className="catalog-page" data-theme={selectedCategory}>
       {/* Фоновый градиент */}
       <div className="catalog-bg-gradient" />
 
       {/* ===== HEADER ===== */}
       <header className={`catalog-header${isSticky ? ' sticky' : ''}`}>
-        <div className="catalog-logo">NormaSport</div>
+        <div className="catalog-logo">
+          <div className="catalog-logo-icon" />
+          NormaSport
+        </div>
         <nav className="catalog-nav">
           {['Главная', 'Инфо', 'ГТО', 'Новости', 'Контакты'].map((label) => (
             <button key={label}>{label}</button>
@@ -215,10 +218,7 @@ export default function CatalogPage() {
               )}
             </div>
 
-            {/* Новостные секции */}
-            <div className="catalog-news-section">
-              <div className="records-title" />
-            </div>
+            {/* Новостная секция */}
             <div className="catalog-news-section">
               <div className="sport-news" />
             </div>
