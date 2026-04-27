@@ -117,7 +117,7 @@ def get_sports_json():
     conn = get_conn()
     cur = conn.cursor()
     cur.execute("""
-        SELECT s.id, s.sport_name, t.type_name
+        SELECT s.id, s.sport_name, s.image_url, t.type_name
         FROM ref_sports s
         LEFT JOIN ref_sport_types t ON s.sport_type_id = t.id
         ORDER BY s.sport_name

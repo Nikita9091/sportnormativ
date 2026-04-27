@@ -78,3 +78,11 @@ button:hover {
 .accordion-content {
   transition: max-height 0.3s ease-out, opacity 0.3s ease;
 }
+
+@media (min-width: 1441px) {
+  body {
+    /* Рассчитываем коэффициент увеличения: 
+       текущая ширина экрана делить на базовую 1440 */
+    zoom: calc(100vw / 1440px);
+  }
+}

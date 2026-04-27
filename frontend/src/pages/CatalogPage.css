@@ -162,9 +162,9 @@
   background-size: contain;
   background-repeat: no-repeat;
   position: absolute;
-  width: clamp(170px, 48vw, 824px);
+  width: clamp(170px, 55vw, 824px);
   height: auto;
-  aspect-ratio: 476.4457190369269 / 704.4159850068885;
+  aspect-ratio: 824/ 483;
   top: 378px;
   right: 0;
   opacity: 1;
@@ -670,6 +670,7 @@
 
 .catalog-sport-card {
   width: 100%;
+  max-width: 15rem;
   aspect-ratio: 1/1.15;
   background: #F9FFFC;
   border-radius: 10px;
@@ -904,6 +905,12 @@
   .catalog-wrapper { margin: 0 3rem; }
   .catalog-page[data-theme="Неолимпийский"] .sun-picture {
     top: 200px;
+  }
+  .catalog-page[data-theme="Неолимпийский"] .sportsman-decoration {
+    width: clamp(170px, 55vw, 824px);
+    height: auto;
+    top: 278px;
+    right: 0;
   }
 }
 
