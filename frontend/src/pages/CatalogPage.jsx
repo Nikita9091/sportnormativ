@@ -65,7 +65,7 @@ export default function CatalogPage() {
         const raw = res.data.sports ?? [];
         setSports(raw.map((s, i) => ({
           id: s.id || `sport-${i}`,
-          name: s.name || s.sport_name || 'Неизвестный вид спорта',
+          name: s.sport_name || 'Неизвестный вид спорта',
           category: s.sport_type || 'Летний олимпийский',
           image_url: s.image_url || null,
           icon: getSportEmoji(s.sport_name, s.sport_type),
@@ -194,7 +194,7 @@ export default function CatalogPage() {
                   <div
                     key={sport.id}
                     className="catalog-sport-card"
-                    onClick={() => navigate(`/normatives/${sport.id}`)}
+                    onClick={() => navigate(`/normatives/${sport.id}`, { state: { sport } })}
                   >
                     <div className="catalog-sport-icon">
                       {sport.image_url ? (
