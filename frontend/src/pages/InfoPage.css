@@ -1,0 +1,319 @@
+/* ===== INFO PAGE OVERRIDES ===== */
+.info-page {
+  box-shadow: 0 0 50px rgba(149, 70, 61, 0.25);
+}
+
+.info-nav-active {
+  font-weight: 900 !important;
+  opacity: 0.6;
+}
+
+/* ===== HERO ===== */
+.info-hero {
+  position: relative;
+  min-height: 540px;
+  display: flex;
+  align-items: center;
+  padding: 120px 8% 60px 8%;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.info-hero-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(125deg, rgba(255, 210, 200, 0.55) 0%, rgba(255, 255, 255, 0) 55%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.info-hero-content {
+  position: relative;
+  z-index: 5;
+  max-width: 520px;
+  flex-shrink: 0;
+}
+
+.info-hero-title {
+  font-family: 'Sofia Sans Extra Condensed', 'Sofia Sans Condensed', sans-serif;
+  font-weight: 900;
+  font-size: clamp(56px, 7vw, 100px);
+  line-height: 1;
+  text-transform: uppercase;
+  color: #4A4A4A;
+  margin: 0 0 1.25rem 0;
+}
+
+.info-hero-subtitle {
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: #333;
+  margin: 0 0 2rem 0;
+}
+
+.info-hero-buttons {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.info-btn-primary {
+  padding: 0.9rem 1.75rem;
+  background: #95463D;
+  color: #fff;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.info-btn-primary:hover { background: #7a3531; }
+
+.info-btn-secondary {
+  padding: 0.9rem 1.75rem;
+  background: #F5EDE9;
+  color: #333;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.info-btn-secondary:hover { background: #ecdbd5; }
+
+/* Hero right: photo + dots */
+.info-hero-image-area {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 52%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.info-hero-dots {
+  position: absolute;
+  right: 44%;
+  top: 90px;
+  width: 160px;
+  height: 200px;
+  background-image: radial-gradient(circle, #b8b8b8 1.5px, transparent 1.5px);
+  background-size: 18px 18px;
+  z-index: 3;
+}
+
+.info-hero-photo {
+  position: absolute;
+  right: 4%;
+  top: 70px;
+  width: 50%;
+  height: 430px;
+  /* Замените URL ниже на фото баскетбольной корзины */
+  background: #1a1a1a center/cover no-repeat;
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/info/basketball.jpg');
+  z-index: 4;
+}
+
+/* ===== EVSK SECTION ===== */
+.info-evsk-section {
+  background: #fff;
+  padding: 4rem 0;
+}
+
+.info-evsk-inner {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 8%;
+  display: flex;
+  gap: 4rem;
+  align-items: flex-start;
+  box-sizing: border-box;
+}
+
+.info-evsk-left {
+  flex: 0 0 38%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.info-evsk-photo {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  /* Замените URL ниже на фото спринтеров */
+  background: #ddd center/cover no-repeat;
+  background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/info/sprinters.jpg');
+}
+
+.info-evsk-caption {
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: #444;
+  margin: 0;
+}
+
+.info-evsk-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+.info-evsk-intro {
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: #333;
+  margin: 0;
+}
+
+.info-evsk-grid {
+  display: flex;
+  gap: 3rem;
+}
+
+.info-evsk-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.info-evsk-col-title {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 1.125rem;
+  color: #95463D;
+  margin: 0 0 0.25rem 0;
+}
+
+.info-evsk-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.info-evsk-list li {
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.9rem;
+  color: #333;
+  line-height: 1.4;
+}
+
+/* ===== USEFUL LINKS ===== */
+.info-links-section {
+  background: #fff;
+  padding: 0 0 4rem 0;
+}
+
+.info-links-inner {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 8%;
+  box-sizing: border-box;
+}
+
+.info-links-title {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 900;
+  font-size: 1.75rem;
+  color: #95463D;
+  margin: 0 0 1.5rem 0;
+}
+
+.info-links-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.info-link-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid #D8D8D8;
+  border-radius: 10px;
+  background: #fff;
+  text-decoration: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.info-link-card:hover {
+  border-color: #95463D;
+  box-shadow: 0 2px 8px rgba(149, 70, 61, 0.12);
+}
+
+.info-link-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+.info-link-text {
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.9rem;
+  color: #2563EB;
+  text-decoration: underline;
+  line-height: 1.4;
+}
+
+/* Footer gradient overrides for info page (rose instead of green) */
+.info-footer-gradient {
+  background: linear-gradient(185.64deg, rgba(217, 217, 217, 0) 32.34%, #C47B6B 95.81%) !important;
+}
+
+.info-page .catalog-footer {
+  border-top-color: #95463D;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1024px) {
+  .info-hero-image-area { width: 45%; }
+  .info-evsk-inner { gap: 2.5rem; }
+}
+
+@media (max-width: 780px) {
+  .info-hero {
+    padding: 110px 6% 3rem 6%;
+    min-height: auto;
+  }
+  .info-hero-image-area { display: none; }
+  .info-hero-content { max-width: 100%; }
+  .info-evsk-inner {
+    flex-direction: column;
+    gap: 2rem;
+    padding: 0 6%;
+  }
+  .info-evsk-left { flex: none; }
+  .info-evsk-grid { gap: 1.5rem; }
+  .info-links-grid { grid-template-columns: 1fr; }
+  .info-links-inner { padding: 0 6%; }
+}
+
+@media (max-width: 480px) {
+  .info-hero-title { font-size: 52px; }
+  .info-hero-buttons { flex-direction: column; }
+  .info-btn-primary,
+  .info-btn-secondary { width: 100%; text-align: center; }
+}

@@ -23,34 +23,12 @@ const SORT_OPTIONS = [
   { value: 'recent',     label: 'Новое' },
 ];
 
-const DEMO_SPORTS = [
-  { id: 'badminton',  name: 'Бадминтон',        category: 'Летний олимпийский',  icon: '🏸' },
-  { id: 'basketball', name: 'Баскетбол',         category: 'Летний олимпийский',  icon: '🏀' },
-  { id: 'baseball',   name: 'Бейсбол',           category: 'Летний олимпийский',  icon: '⚾' },
-  { id: 'boxing',     name: 'Бокс',              category: 'Летний олимпийский',  icon: '🥊' },
-  { id: 'athletics',  name: 'Легкая атлетика',   category: 'Летний олимпийский',  icon: '🏃' },
-  { id: 'golf',       name: 'Гольф',             category: 'Летний олимпийский',  icon: '⛳' },
-  { id: 'football',   name: 'Футбол',            category: 'Летний олимпийский',  icon: '⚽' },
-  { id: 'volleyball', name: 'Волейбол',          category: 'Летний олимпийский',  icon: '🏐' },
-  { id: 'tennis',     name: 'Теннис',            category: 'Летний олимпийский',  icon: '🎾' },
-  { id: 'judo',       name: 'Дзюдо',             category: 'Летний олимпийский',  icon: '🥋' },
-  { id: 'skiing',     name: 'Лыжи',              category: 'Зимний олимпийский',  icon: '⛷️' },
-  { id: 'skating',    name: 'Фигурное катание',  category: 'Зимний олимпийский',  icon: '⛸️' },
-  { id: 'snowboard',  name: 'Сноуборд',          category: 'Зимний олимпийский',  icon: '🏂' },
-  { id: 'icehockey',  name: 'Хоккей',            category: 'Зимний олимпийский',  icon: '🏒' },
-  { id: 'curling',    name: 'Керлинг',           category: 'Зимний олимпийский',  icon: '🥌' },
-  { id: 'cheerleading', name: 'Чирлидинг',       category: 'Неолимпийский',       icon: '📣' },
-  { id: 'parkour',    name: 'Паркур',            category: 'Неолимпийский',       icon: '🤸' },
-  { id: 'sumo',       name: 'Сумо',              category: 'Национальный',        icon: '⭕' },
-  { id: 'kabaddi',    name: 'Кабадди',           category: 'Национальный',        icon: '👥' },
-  { id: 'wbasket',    name: 'Инвалидный баскет', category: 'Адаптивный',          icon: '♿' },
-  { id: 'paraswim',   name: 'Пара-плавание',     category: 'Адаптивный',          icon: '♿' },
-];
 
 export default function CatalogPage() {
   const navigate = useNavigate();
   const [sports, setSports] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   const [selectedCategory, setSelectedCategory] = useState('Летний олимпийский');
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,7 +49,7 @@ export default function CatalogPage() {
           icon: getSportEmoji(s.sport_name, s.sport_type),
         })));
       })
-      .catch(() => setSports(DEMO_SPORTS))
+      .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, []);
 
@@ -108,9 +86,11 @@ export default function CatalogPage() {
           NormaSport
         </div>
         <nav className="catalog-nav">
-          {['Главная', 'Инфо', 'ГТО', 'Новости', 'Контакты'].map((label) => (
-            <button key={label}>{label}</button>
-          ))}
+          <button onClick={() => navigate('/catalog')}>Главная</button>
+          <button onClick={() => navigate('/info')}>Инфо</button>
+          <button>ГТО</button>
+          <button>Новости</button>
+          <button>Контакты</button>
         </nav>
         <div className="catalog-search">
           <svg className="catalog-search-icon" viewBox="0 0 24 24" fill="none" stroke="#071A14" strokeWidth="2">
@@ -187,6 +167,8 @@ export default function CatalogPage() {
             <div className="catalog-sports-grid">
               {loading ? (
                 <div className="catalog-grid-empty">Загрузка видов спорта…</div>
+              ) : error ? (
+                <div className="catalog-grid-empty">Не удалось загрузить виды спорта. Проверьте соединение или попробуйте позже.</div>
               ) : visibleSports.length === 0 ? (
                 <div className="catalog-grid-empty">Виды спорта не найдены</div>
               ) : (
