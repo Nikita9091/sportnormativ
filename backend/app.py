@@ -773,6 +773,7 @@ def get_normatives_by_discipline_v1_json(discipline_id: int):
             else:
                 roots.append(cond)
         normative["conditions"] = roots
+        normative["is_competitive"] = any(c["type"] == "comp" for c in roots)
         del normative["_all_conditions"]
 
     return {
