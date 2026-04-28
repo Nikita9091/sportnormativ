@@ -1,11 +1,14 @@
 from fastapi import FastAPI, HTTPException, Request, Form, Query
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import hashlib
 import html
+import json
+import time
 
 app = FastAPI(title="SportNormativ API")
 
@@ -170,6 +173,64 @@ def get_sports_v1_json():
             })
 
     return {"sports": list(sports_map.values())}
+
+
+_sports_v2_cache: dict = {"data": None, "etag": None, "expires": 0.0}
+_SPORTS_V2_TTL = 300  # секунды
+
+
+@app.get("/v_2/sports")
+def get_sports_v2_json(request: Request):
+    """
+    Виды спорта из действующих актов, без дисциплин.
+    Серверный кеш (TTL 5 мин) + ETag для браузера:
+    - в рамках TTL 304 отдаётся без обращения к БД
+    - после истечения TTL данные обновляются из БД и ETag пересчитывается
+    """
+    now = time.time()
+    if_none_match = request.headers.get("if-none-match")
+
+    if _sports_v2_cache["data"] is not None and now < _sports_v2_cache["expires"]:
+        etag = _sports_v2_cache["etag"]
+        if if_none_match == etag:
+            return Response(status_code=304)
+        return JSONResponse(
+            content=_sports_v2_cache["data"],
+            headers={"ETag": etag, "Cache-Control": "no-cache"},
+        )
+
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT DISTINCT
+            s.id,
+            s.sport_name,
+            s.image_url,
+            t.type_name AS sport_type
+        FROM ref_sports s
+        LEFT JOIN ref_sport_types t ON s.sport_type_id = t.id
+        INNER JOIN sport_ministry_act a ON a.sport_id = s.id AND a.end_date IS NULL
+        ORDER BY s.sport_name
+    """)
+    rows = [row_to_dict(r) for r in cur.fetchall()]
+    conn.close()
+
+    data = {"sports": rows}
+    etag = '"' + hashlib.md5(
+        json.dumps(data, ensure_ascii=False, sort_keys=True).encode()
+    ).hexdigest() + '"'
+
+    _sports_v2_cache["data"] = data
+    _sports_v2_cache["etag"] = etag
+    _sports_v2_cache["expires"] = now + _SPORTS_V2_TTL
+
+    if if_none_match == etag:
+        return Response(status_code=304)
+
+    return JSONResponse(
+        content=data,
+        headers={"ETag": etag, "Cache-Control": "no-cache"},
+    )
 
 
 @app.get("/v_2/sports/{sport_id}/disciplines")
@@ -505,8 +566,10 @@ def get_normatives_for_sport_json(sport_id: int):
             rr.full_name            AS rank_full,
             rr.prestige,
             rreq.requirement_value,
-            rreq.description        AS requirement_desc,
+            rreq.requirement_type_id,
+            c.id                    AS condition_id,
             c.condition,
+            c.parent_id             AS condition_parent_id,
             n.id                    AS normative_id,
             rpt.type_name           AS param_type,
             rp.parameter_value      AS param_value
@@ -522,7 +585,7 @@ def get_normatives_for_sport_json(sport_id: int):
         JOIN conditions c           ON c.normative_id = n.id
         JOIN ref_requirements rreq  ON rreq.id = c.requirement_id
         WHERE rs.id = %s
-        ORDER BY rd.discipline_name, rr.prestige DESC, rpt.type_name, c.condition
+        ORDER BY rd.discipline_name, rr.prestige DESC, rpt.type_name, c.parent_id NULLS FIRST, c.id
     """
     cur.execute(query, (sport_id,))
     rows = cur.fetchall()
@@ -549,12 +612,23 @@ def get_normatives_for_sport_json(sport_id: int):
                 "rank_short": row["rank_short"],
                 "rank_full": row["rank_full"],
                 "rank_prestige": row["prestige"],
-                "condition": {},
+                "is_competition": False,
+                "_seen_conditions": set(),
+                "condition": [],
             }
+        n = normatives_dict[nid]
         if row["param_type"] and row["param_value"]:
-            normatives_dict[nid]["discipline_parameters"][row["param_type"]] = row["param_value"]
-        if row["requirement_value"] and row["condition"]:
-            normatives_dict[nid]["condition"][row["requirement_value"]] = row["condition"]
+            n["discipline_parameters"][row["param_type"]] = row["param_value"]
+        cid = row["condition_id"]
+        if cid not in n["_seen_conditions"]:
+            n["_seen_conditions"].add(cid)
+            n["condition"].append({
+                "id": cid,
+                "type": row["requirement_value"],
+                "value": row["condition"],
+                "is_competition": row["requirement_type_id"] == 16,
+                "parent_id": row["condition_parent_id"],
+            })
 
     normatives_data = [
         {

@@ -29,6 +29,9 @@
 .catalog-page[data-theme="Летний олимпийский"] .catalog-bg-gradient {
   background: linear-gradient(5.1deg, rgba(217, 217, 217, 0) 42.19%, rgb(37, 149, 114) 96.17%);
 }
+.catalog-page[data-theme="Летний олимпийский"] .catalog-search-input::placeholder {
+  color: #114333;
+}
 .catalog-page[data-theme="Летний олимпийский"] .sun-picture {
   background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/summer/sun.png');
   opacity: 0.4;
@@ -238,7 +241,7 @@
   box-shadow: 0 0 50px rgba(210, 127, 61, 0.45);
 }
 .catalog-page[data-theme="Национальный"] .catalog-bg-gradient {
-  background: linear-gradient(5.1deg, rgba(217, 217, 217, 0) 42.19%, rgb(210, 127, 61) 96.17%);
+  background: linear-gradient(5.1deg, rgba(217, 217, 217, 0) 42.19%, #F8A28A 96.17%);
 }
 .catalog-page[data-theme="Национальный"] .sun-picture {
   background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/national/ornament.png');
@@ -259,6 +262,12 @@
 .catalog-page[data-theme="Национальный"] .catalog-footer-gradient {
   background: linear-gradient(185.64deg, rgba(217, 217, 217, 0) 32.34%, #D27F3D 95.81%);
 }
+.catalog-page[data-theme="Национальный"] .catalog-search {
+  border: 0.5px solid #734B4B;
+}
+.catalog-page[data-theme="Национальный"] .catalog-search-input::placeholder {
+  color: #734B4B;
+}
 
 /* ─────────────────────────────────────────────────────────────────────
    6. АДАПТИВНЫЕ (спокойная бирюзово-лавандовая гамма)
@@ -268,7 +277,10 @@
   box-shadow: 0 0 50px rgba(86, 170, 182, 0.45);
 }
 .catalog-page[data-theme="Адаптивный"] .catalog-bg-gradient {
-  background: linear-gradient(5.1deg, rgba(217, 217, 217, 0) 42.19%, rgb(86, 170, 182) 96.17%);
+  background: linear-gradient(5.1deg, #D9D9D900 42.19%, #3DCED0 96.17%);
+}
+.catalog-page[data-theme="Адаптивный"] .catalog-search-input::placeholder {
+  color: #004F47;
 }
 .catalog-page[data-theme="Адаптивный"] .sun-picture {
   background-image: url('https://mirzemlyaniki.ru/pics/sportnormative_pics/adaptive/heart.png');

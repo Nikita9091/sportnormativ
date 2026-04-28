@@ -38,7 +38,7 @@ export default function CatalogPage() {
 
   useEffect(() => {
     axios
-      .get(`${API}/v_1/sports`)
+      .get(`${API}/v_2/sports`)
       .then((res) => {
         const raw = res.data.sports ?? [];
         setSports(raw.map((s, i) => ({

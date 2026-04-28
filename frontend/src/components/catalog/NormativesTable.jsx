@@ -94,9 +94,6 @@ function ParamGroup({ params, normatives }) {
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getRankColor(norm.rank?.short)}`}>
                     {norm.rank?.short ?? '—'}
                   </span>
-                  {norm.rank?.full && (
-                    <div className="text-[10px] text-gray-400 font-normal mt-0.5 leading-tight">{norm.rank.full}</div>
-                  )}
                 </th>
               ))}
             </tr>
