@@ -759,21 +759,24 @@ def get_normatives_by_discipline_v1_json(discipline_id: int):
             rpt.type_name               AS param_type,
             rp.parameter_value          AS param_value,
             rreq.requirement_type_id    AS requirement_type_id,
+            reqt.is_competition         AS is_comp,
+            reqt.type_name              AS requirement_type,
             rreq.requirement_value      AS condition_name,
             c.condition                 AS condition_value,
             c.id                        AS condition_id,
             c.parent_id                 AS condition_parent_id
         FROM normatives n
-        JOIN groups g               ON g.normative_id = n.id
+        JOIN groups g                      ON g.normative_id = n.id
         JOIN lnk_discipline_parameters ldp ON ldp.id = g.discipline_parameter_id
-        JOIN ref_disciplines rd     ON rd.id = ldp.discipline_id
-        JOIN sport_ministry_act sma ON sma.id = rd.sport_act_id
-        JOIN ref_sports rs          ON rs.id = sma.sport_id
-        JOIN ref_parameters rp      ON rp.id = ldp.parameter_id
-        JOIN ref_parameters_types rpt ON rpt.id = rp.parameter_type_id
-        JOIN conditions c           ON c.normative_id = n.id
-        JOIN ref_requirements rreq  ON rreq.id = c.requirement_id
-        JOIN ref_ranks rr           ON rr.id = n.rank_id
+        JOIN ref_disciplines rd            ON rd.id = ldp.discipline_id
+        JOIN sport_ministry_act sma        ON sma.id = rd.sport_act_id
+        JOIN ref_sports rs                 ON rs.id = sma.sport_id
+        JOIN ref_parameters rp             ON rp.id = ldp.parameter_id
+        JOIN ref_parameters_types rpt      ON rpt.id = rp.parameter_type_id
+        JOIN conditions c                  ON c.normative_id = n.id
+        JOIN ref_requirements rreq         ON rreq.id = c.requirement_id
+        JOIN ref_requirements_types reqt  ON reqt.id = rreq.requirement_type_id
+        JOIN ref_ranks rr                  ON rr.id = n.rank_id
         WHERE rd.id = %s
         ORDER BY n.id, c.parent_id NULLS FIRST, c.id
     """
@@ -819,21 +822,13 @@ def get_normatives_by_discipline_v1_json(discipline_id: int):
         # Условия (плоский сбор, затем строим дерево)
         cond_id = row["condition_id"]
         if cond_id not in normative["_all_conditions"]:
-            req_type = row["requirement_type_id"]
-            if req_type == 1:
-                ctype = "norm"
-            elif req_type == 2:
-                ctype = "comp"
-            else:
-                ctype = "other"
-
             normative["_all_conditions"][cond_id] = {
                 "id": cond_id,
-                "type": ctype,
+                "type": row["requirement_type"],
                 "name": row["condition_name"],
                 "value": row["condition_value"],
-                "parent_id": row["condition_parent_id"],
-                "additional": []
+                "is_competition": row["is_comp"],
+                "parent_id": row["condition_parent_id"]
             }
 
     # Второй проход: строим дерево условий через parent_id
@@ -847,7 +842,6 @@ def get_normatives_by_discipline_v1_json(discipline_id: int):
             else:
                 roots.append(cond)
         normative["conditions"] = roots
-        normative["is_competitive"] = any(c["type"] == "comp" for c in roots)
         del normative["_all_conditions"]
 
     return {

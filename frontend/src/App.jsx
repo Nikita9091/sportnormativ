@@ -275,10 +275,11 @@ export default function App() {
   return (
     <Router>
       <Routes>
+        <Route path="/" element={<CatalogPage />} />
         <Route path="/catalog" element={<CatalogPage />} />
         <Route path="/info" element={<InfoPage />} />
         <Route path="/normatives/:sport_id" element={<NormativePage />} />
-        <Route path="/" element={<MainApp />} />
+        <Route path="/admin" element={<MainApp />} />
       </Routes>
     </Router>
   );
