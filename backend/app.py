@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
 import os
+from dotenv import load_dotenv
+load_dotenv()  # загружает backend/.env если файл существует; в production ничего не делает
 import psycopg2
 from psycopg2 import pool as pg_pool
 from psycopg2.extras import RealDictCursor
@@ -42,6 +44,11 @@ DB_CONFIG = {
     "password": os.environ.get("DB_PASSWORD", ""),
     "host":     os.environ.get("DB_HOST",     "185.239.51.243"),
     "port":     os.environ.get("DB_PORT",     "5432"),
+    # TCP keepalives не дают idle-соединениям в пуле протухнуть
+    "keepalives":          1,
+    "keepalives_idle":     30,
+    "keepalives_interval": 10,
+    "keepalives_count":    5,
 }
 
 _db_pool = pg_pool.ThreadedConnectionPool(
@@ -53,7 +60,17 @@ _db_pool = pg_pool.ThreadedConnectionPool(
 
 
 def get_conn():
-    return _db_pool.getconn()
+    conn = _db_pool.getconn()
+    # Проверяем соединение: если протухло — закрываем и берём новое
+    try:
+        conn.poll()
+    except psycopg2.OperationalError:
+        try:
+            _db_pool.putconn(conn, close=True)
+        except Exception:
+            pass
+        conn = _db_pool.getconn()
+    return conn
 
 
 def release_conn(conn):
