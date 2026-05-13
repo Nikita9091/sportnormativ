@@ -1,4 +1,6 @@
 /frontend/node_modules/
+/.env
+frontend/.env.local
 backend/__pycache__/app.cpython-314.pyc
 .idea/misc.xml
 .idea/modules.xml

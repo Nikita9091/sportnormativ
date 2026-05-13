@@ -431,7 +431,7 @@ npm install
 npm run dev
 ```
 
-Приложение откроется на `http://localhost:5173`. Убедись, что `src/config/api.js` указывает на `http://localhost:8000`.
+Приложение откроется на `http://localhost:5173`. URL бэкенда задаётся через `frontend/.env` (по умолчанию `http://localhost:8000`).
 
 ### Сборка фронтенда
 
@@ -458,12 +458,13 @@ npm run preview # предпросмотр production-сборки на :4173
    ```
 4. Убедись, что DNS-записи `sportnormativ.ru`, `www.sportnormativ.ru` и `traefik.sportnormativ.ru` указывают на IP сервера.
 
-5. **Обнови `frontend/src/config/api.js`** перед сборкой:
-   ```js
-   export const API_CONFIG = {
-     baseURL: "/api"  // Nginx срежет префикс /api и проксирует на backend:8000
-   };
+5. Создай файл `.env` в корне репозитория (рядом с `docker-compose.yml`):
+   ```bash
+   cp .env.example .env
+   # отредактируй .env, укажи DB_PASSWORD и DB_HOST
    ```
+   Docker Compose автоматически подтянет переменные из этого файла и передаст их бэкенду.
+   Фронтенд при сборке (`npm run build`) автоматически использует `frontend/.env.production` — вручную менять `api.js` больше не нужно.
 
 ### Запуск
 
@@ -491,8 +492,8 @@ docker compose logs -f backend    # логи в реальном времени
 
 ## Известные ограничения
 
-- **Нет авторизации** — административный интерфейс (`/`) открыт публично.
+- **Нет авторизации** — административный интерфейс (`/admin`) открыт публично.
 - **Нет миграций** — схема БД управляется вручную через `sportnormativ_bd_schema.sql`.
 - **Нет тестов** — ни юнит, ни интеграционных.
-- **URL API захардкожен** — `frontend/src/config/api.js` нужно менять вручную перед production-сборкой.
-- **Одна точка отказа** — бэкенд монолитный (`app.py`), новое соединение к БД на каждый запрос (нет пула).
+- ~~**URL API захардкожен**~~ — решено: `VITE_API_URL` читается из `frontend/.env` / `frontend/.env.production`.
+- ~~**Новое соединение к БД на каждый запрос**~~ — решено: `psycopg2.ThreadedConnectionPool` (minconn=2, maxconn=10), credentials из переменных окружения.

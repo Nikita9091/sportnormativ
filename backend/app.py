@@ -3,7 +3,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
+import os
 import psycopg2
+from psycopg2 import pool as pg_pool
 from psycopg2.extras import RealDictCursor
 import hashlib
 import html
@@ -35,20 +37,27 @@ app.add_middleware(
 
 # === Настройка подключения к PostgreSQL ===
 DB_CONFIG = {
-    "dbname": "sportnormativ_db",
-    "user": "api_user",
-    "password": "U_Akl*cOo$j%_9*",
-    "host": "185.239.51.243",
-    "port": "5432"
+    "dbname":   os.environ.get("DB_NAME",     "sportnormativ_db"),
+    "user":     os.environ.get("DB_USER",     "api_user"),
+    "password": os.environ.get("DB_PASSWORD", ""),
+    "host":     os.environ.get("DB_HOST",     "185.239.51.243"),
+    "port":     os.environ.get("DB_PORT",     "5432"),
 }
+
+_db_pool = pg_pool.ThreadedConnectionPool(
+    minconn=2,
+    maxconn=10,
+    cursor_factory=RealDictCursor,
+    **DB_CONFIG,
+)
 
 
 def get_conn():
-    try:
-        conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
-        return conn
-    except Exception as e:
-        raise Exception(f"Database connection error: {e}")
+    return _db_pool.getconn()
+
+
+def release_conn(conn):
+    _db_pool.putconn(conn)
 
 
 def row_to_dict(row, cursor=None):
@@ -126,7 +135,7 @@ def get_sports_json():
         ORDER BY s.sport_name
     """)
     rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
+    release_conn(conn)
     return {"sports": rows}
 
 
@@ -153,7 +162,7 @@ def get_sports_v1_json():
         ORDER BY s.id, d.discipline_name
     """)
     rows = cur.fetchall()
-    conn.close()
+    release_conn(conn)
 
     sports_map = {}
     for row in rows:
@@ -213,7 +222,7 @@ def get_sports_v2_json(request: Request):
         ORDER BY s.sport_name
     """)
     rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
+    release_conn(conn)
 
     data = {"sports": rows}
     etag = '"' + hashlib.md5(
@@ -284,7 +293,7 @@ def get_disciplines_for_sport_v2(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        conn.close()
+        release_conn(conn)
 
 
 # --- Устаревшие эндпоинты дисциплин (оставлены для обратной совместимости) ---
@@ -321,7 +330,7 @@ def list_disciplines_json(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        conn.close()
+        release_conn(conn)
 
 
 @app.get("/v_1/disciplines/{sport_id}")
@@ -345,7 +354,7 @@ def list_disciplines_for_sport_v1_json(sport_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        conn.close()
+        release_conn(conn)
 
 
 # =============================================================================
@@ -363,7 +372,7 @@ def list_parameters_json():
         ORDER BY t.type_name, p.parameter_value
     """)
     rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
+    release_conn(conn)
     return {"parameters": rows}
 
 
@@ -373,7 +382,7 @@ def list_parameter_types_json():
     cur = conn.cursor()
     cur.execute("SELECT id, type_name AS parameter_type_name FROM ref_parameters_types")
     rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
+    release_conn(conn)
     return {"parameter_types": rows}
 
 
@@ -383,7 +392,7 @@ def list_requirement_types_json():
     cur = conn.cursor()
     cur.execute("SELECT id, type_name AS requirement_type_name FROM ref_requirements_types")
     rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
+    release_conn(conn)
     return {"requirements_types": rows}
 
 
@@ -398,7 +407,7 @@ def list_requirements_json():
         ORDER BY t.type_name, p.requirement_value
     """)
     rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
+    release_conn(conn)
     return {"requirements": rows}
 
 
@@ -414,7 +423,7 @@ def list_ldp_json():
         ORDER BY d.discipline_name, p.parameter_value
     """)
     rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
+    release_conn(conn)
     return {"lnk_discipline_parameters": rows}
 
 
@@ -436,7 +445,7 @@ def list_ldp_for_discipline(discipline_id: int):
         ORDER BY pt.type_name, p.parameter_value
     """, (discipline_id,))
     rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
+    release_conn(conn)
     return {"lnk_discipline_parameters": rows}
 
 
@@ -446,7 +455,7 @@ def list_ranks_json():
     cur = conn.cursor()
     cur.execute("SELECT id, short_name, full_name, prestige FROM ref_ranks ORDER BY prestige DESC")
     rows = [row_to_dict(r) for r in cur.fetchall()]
-    conn.close()
+    release_conn(conn)
     return {"ranks": rows}
 
 
@@ -500,7 +509,7 @@ def get_normatives_for_sport_html(sport_id: int):
     """
     cur.execute(query, (sport_id,))
     rows = cur.fetchall()
-    conn.close()
+    release_conn(conn)
 
     if not rows:
         return HTMLResponse(
@@ -589,7 +598,7 @@ def get_normatives_for_sport_json(sport_id: int):
     """
     cur.execute(query, (sport_id,))
     rows = cur.fetchall()
-    conn.close()
+    release_conn(conn)
 
     if not rows:
         return {
@@ -693,7 +702,7 @@ def get_normatives_for_sport_v1_json(sport_id: int):
     """
     cur.execute(query, (sport_id,))
     rows = cur.fetchall()
-    conn.close()
+    release_conn(conn)
 
     if not rows:
         raise HTTPException(status_code=404, detail="Sport or normatives not found")
@@ -782,7 +791,7 @@ def get_normatives_by_discipline_v1_json(discipline_id: int):
     """
     cur.execute(query, (discipline_id,))
     rows = cur.fetchall()
-    conn.close()
+    release_conn(conn)
 
     if not rows:
         raise HTTPException(
@@ -924,7 +933,7 @@ def get_normative_by_id_json(normative_id: int):
     except Exception as e:
         return {"error": str(e), "normative_id": normative_id, "success": False}
     finally:
-        conn.close()
+        release_conn(conn)
 
 
 @app.get("/v_1/normative/{normative_id}")
@@ -962,7 +971,7 @@ def get_normative_by_id_v1_json(normative_id: int):
     """
     cur.execute(query, (normative_id,))
     rows = cur.fetchall()
-    conn.close()
+    release_conn(conn)
 
     if not rows:
         raise HTTPException(status_code=404, detail="Normative not found")
@@ -1012,13 +1021,13 @@ def add_disciplines(payload: DisciplinesIn):
     errors = []
 
     if len(payload.discipline_names) != len(payload.discipline_codes):
-        conn.close()
+        release_conn(conn)
         return {"inserted": [], "errors": ["Количество названий и кодов дисциплин не совпадает."]}
 
     # Проверяем, что акт существует
     cur.execute("SELECT id FROM sport_ministry_act WHERE id = %s", (payload.sport_act_id,))
     if not cur.fetchone():
-        conn.close()
+        release_conn(conn)
         raise HTTPException(
             status_code=400,
             detail=f"sport_act_id {payload.sport_act_id} не найден в sport_ministry_act"
@@ -1066,7 +1075,7 @@ def add_disciplines(payload: DisciplinesIn):
             errors.append({"discipline_name": name, "discipline_code": code, "error": str(e)})
 
     cur.close()
-    conn.close()
+    release_conn(conn)
     return {"inserted": inserted, "errors": errors}
 
 
@@ -1093,7 +1102,7 @@ def add_parameter_type(payload: ParameterTypeIn):
             nid = row["id"] if row else None
         else:
             nid = None
-    conn.close()
+    release_conn(conn)
     return {"id": nid, "type_name": payload.short_name}
 
 
@@ -1103,7 +1112,7 @@ def add_parameter(payload: ParameterIn):
     cur = conn.cursor()
     cur.execute("SELECT id FROM ref_parameters_types WHERE id = %s", (payload.parameter_type_id,))
     if not cur.fetchone():
-        conn.close()
+        release_conn(conn)
         raise HTTPException(
             status_code=400,
             detail=f"parameter_type_id {payload.parameter_type_id} not found"
@@ -1127,7 +1136,7 @@ def add_parameter(payload: ParameterIn):
             pid = row["id"] if row else None
         else:
             pid = None
-    conn.close()
+    release_conn(conn)
     return {"id": pid, "parameter_value": payload.parameter_value, "parameter_type_id": payload.parameter_type_id}
 
 
@@ -1142,7 +1151,7 @@ def add_requirement(payload: RequirementIn):
     cur = conn.cursor()
     cur.execute("SELECT id FROM ref_requirements_types WHERE id = %s", (payload.requirement_type_id,))
     if not cur.fetchone():
-        conn.close()
+        release_conn(conn)
         raise HTTPException(
             status_code=400,
             detail=f"requirement_type_id {payload.requirement_type_id} not found"
@@ -1175,7 +1184,7 @@ def add_requirement(payload: RequirementIn):
             pid = row["id"] if row else None
         else:
             pid = None
-    conn.close()
+    release_conn(conn)
     return {
         "id": pid,
         "requirement_value": payload.requirement_value,
@@ -1189,7 +1198,7 @@ def link_parameters(payload: LinkParametersIn):
     cur = conn.cursor()
     cur.execute("SELECT id FROM ref_disciplines WHERE id = %s", (payload.discipline_id,))
     if not cur.fetchone():
-        conn.close()
+        release_conn(conn)
         raise HTTPException(status_code=400, detail=f"discipline_id {payload.discipline_id} not found")
 
     inserted = []
@@ -1226,7 +1235,7 @@ def link_parameters(payload: LinkParametersIn):
             else:
                 errors.append({"parameter_id": pid, "error": str(e)})
     conn.commit()
-    conn.close()
+    release_conn(conn)
     return {"inserted": inserted, "errors": errors}
 
 
@@ -1254,7 +1263,7 @@ def add_normatives(payload: CreateNormativeIn):
     # Валидация discipline_id
     cur.execute("SELECT id FROM ref_disciplines WHERE id = %s", (payload.discipline_id,))
     if not cur.fetchone():
-        conn.close()
+        release_conn(conn)
         raise HTTPException(status_code=400, detail=f"discipline_id {payload.discipline_id} not found")
 
     # Валидация ldp_ids — все должны принадлежать указанной дисциплине
@@ -1262,10 +1271,10 @@ def add_normatives(payload: CreateNormativeIn):
         cur.execute("SELECT discipline_id FROM lnk_discipline_parameters WHERE id = %s", (ldp_id,))
         row = cur.fetchone()
         if not row:
-            conn.close()
+            release_conn(conn)
             raise HTTPException(status_code=400, detail=f"ldp_id {ldp_id} not found")
         if row["discipline_id"] != payload.discipline_id:
-            conn.close()
+            release_conn(conn)
             raise HTTPException(
                 status_code=400,
                 detail=f"ldp_id {ldp_id} does not belong to discipline_id {payload.discipline_id}"
@@ -1274,14 +1283,14 @@ def add_normatives(payload: CreateNormativeIn):
     # Валидация requirement_id
     cur.execute("SELECT id FROM ref_requirements WHERE id = %s", (payload.requirement_id,))
     if not cur.fetchone():
-        conn.close()
+        release_conn(conn)
         raise HTTPException(status_code=400, detail=f"requirement_id {payload.requirement_id} not found")
 
     # Валидация requirement_id для дополнительных условий
     for add_req in payload.additional_requirements:
         cur.execute("SELECT id FROM ref_requirements WHERE id = %s", (add_req.requirement_id,))
         if not cur.fetchone():
-            conn.close()
+            release_conn(conn)
             raise HTTPException(
                 status_code=400,
                 detail=f"additional requirement_id {add_req.requirement_id} not found"
@@ -1395,10 +1404,10 @@ def add_normatives(payload: CreateNormativeIn):
 
     except Exception as e:
         conn.rollback()
-        conn.close()
+        release_conn(conn)
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
-    conn.close()
+    release_conn(conn)
     return {
         "created": created,
         "updated_existing": used_existing,
@@ -1473,7 +1482,7 @@ def delete_normative(normative_id: int):
             }
         return {"success": False, "error": error_msg, "normative_id": normative_id}
     finally:
-        conn.close()
+        release_conn(conn)
 
 
 @app.delete("/disciplines/{discipline_id}")
@@ -1488,7 +1497,7 @@ def delete_discipline(discipline_id: int):
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        conn.close()
+        release_conn(conn)
 
 
 @app.delete("/parameter-types/{id}")
@@ -1503,7 +1512,7 @@ def delete_param_type(id: int):
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        conn.close()
+        release_conn(conn)
 
 
 @app.delete("/parameters/{id}")
@@ -1518,7 +1527,7 @@ def delete_parameter(id: int):
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        conn.close()
+        release_conn(conn)
 
 
 @app.delete("/requirements/{id}")
@@ -1533,7 +1542,7 @@ def delete_requirement(id: int):
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        conn.close()
+        release_conn(conn)
 
 
 @app.delete("/link-parameters")
@@ -1564,7 +1573,7 @@ def delete_link(payload: LinkDeletePayload):
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера при удалении связи.")
     finally:
         if conn:
-            conn.close()
+            release_conn(conn)
 
 
 if __name__ == "__main__":
