@@ -54,6 +54,8 @@ services:
   frontend:
     build: ./frontend
     restart: always
+    volumes:
+      - ./.htpasswd:/etc/nginx/.htpasswd:ro
     # !!! МЫ УБРАЛИ СЕКЦИЮ 'ports' !!!
     # Traefik будет сам к нему обращаться
     depends_on:
