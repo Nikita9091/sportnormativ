@@ -148,20 +148,94 @@ sportnormativ/
 
 PostgreSQL. Схема хранится в `sportnormativ_bd_schema.sql`.
 
-### Диаграмма связей (упрощённо)
+### ER-диаграмма
 
-```
-ref_sport_types ←── ref_sports ←── sport_ministry_act ←── ref_disciplines
-                                                                │
-                                              lnk_discipline_parameters ──→ ref_parameters
-                                                        │                         │
-                                                        │                    ref_parameters_types
-                                                        ↓
-                                                     groups ──→ normatives ──→ ref_ranks
-                                                                    │
-                                                                conditions ──→ ref_requirements
-                                                                  (parent_id)       │
-                                                                             ref_requirements_types
+```mermaid
+erDiagram
+    ref_sport_types {
+        int id PK
+        varchar type_name UK
+    }
+    ref_sports {
+        int id PK
+        varchar sport_code UK
+        varchar sport_name
+        int sport_type_id FK
+        text image_url
+    }
+    sport_ministry_act {
+        int id PK
+        date start_date
+        date end_date
+        text act_details
+        int sport_id FK
+    }
+    ref_disciplines {
+        int id PK
+        varchar discipline_code UK
+        int sport_act_id FK
+        text discipline_name
+    }
+    ref_parameters_types {
+        int id PK
+        varchar type_name UK
+    }
+    ref_parameters {
+        int id PK
+        int parameter_type_id FK
+        varchar parameter_value
+    }
+    lnk_discipline_parameters {
+        int id PK
+        int discipline_id FK
+        int parameter_id FK
+    }
+    ref_ranks {
+        int id PK
+        varchar short_name
+        varchar full_name
+        int prestige UK
+    }
+    normatives {
+        int id PK
+        int rank_id FK
+    }
+    groups {
+        int id PK
+        int discipline_parameter_id FK
+        int normative_id FK
+    }
+    ref_requirements_types {
+        int id PK
+        varchar type_name UK
+    }
+    ref_requirements {
+        int id PK
+        int requirement_type_id FK
+        text requirement_value
+        text description
+    }
+    conditions {
+        int id PK
+        int normative_id FK
+        int requirement_id FK
+        text condition
+        int parent_id FK
+    }
+
+    ref_sport_types ||--o{ ref_sports : "sport_type_id"
+    ref_sports ||--o{ sport_ministry_act : "sport_id"
+    sport_ministry_act ||--o{ ref_disciplines : "sport_act_id"
+    ref_parameters_types ||--o{ ref_parameters : "parameter_type_id"
+    ref_disciplines ||--o{ lnk_discipline_parameters : "discipline_id"
+    ref_parameters ||--o{ lnk_discipline_parameters : "parameter_id"
+    lnk_discipline_parameters ||--o{ groups : "discipline_parameter_id"
+    ref_ranks ||--o{ normatives : "rank_id"
+    normatives ||--o{ groups : "normative_id"
+    normatives ||--o{ conditions : "normative_id"
+    ref_requirements_types ||--o{ ref_requirements : "requirement_type_id"
+    ref_requirements ||--o{ conditions : "requirement_id"
+    conditions ||--o{ conditions : "parent_id"
 ```
 
 ### Таблицы
