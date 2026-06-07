@@ -76,7 +76,7 @@ export default function InfoPage() {
       <header className={`catalog-header${isSticky ? ' sticky' : ''}`}>
         <div className="catalog-logo">
           <div className="catalog-logo-icon" />
-          NormaSport
+          СпортНорматив
         </div>
         <nav className="catalog-nav">
           <button onClick={() => navigate('/catalog')}>Главная</button>
@@ -122,12 +122,6 @@ export default function InfoPage() {
               Нормативы ГТО
             </button>
           </div>
-        </div>
-
-        <div className="info-hero-image-area">
-          <div className="info-hero-dots" />
-          {/* Замените background-image в InfoPage.css (.info-hero-photo) на URL фото баскетбольной корзины */}
-          <div className="info-hero-photo" />
         </div>
       </section>
 
