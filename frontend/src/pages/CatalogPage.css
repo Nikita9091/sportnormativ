@@ -355,7 +355,7 @@
 /* ===== HEADER ===== */
 .catalog-header {
   background: transparent;
-  padding: 1.4rem 8% 1.25rem 8%;
+  padding: 1.25rem 8% 1.25rem 8%;
   display: flex;
   width: 100%;
   align-items: center;
@@ -372,7 +372,7 @@
 .catalog-header.sticky {
   position: fixed;
   top: 0;
-  padding: 1.25rem 7%;
+  padding: 1.18rem 7%;
   transform: translateY(-100%);
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(12px);

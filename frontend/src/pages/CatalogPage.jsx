@@ -83,7 +83,7 @@ export default function CatalogPage() {
       <header className={`catalog-header${isSticky ? ' sticky' : ''}`}>
         <div className="catalog-logo">
           <div className="catalog-logo-icon" />
-          NormaSport
+          СпортНорматив
         </div>
         <nav className="catalog-nav">
           <button onClick={() => navigate('/catalog')}>Главная</button>
